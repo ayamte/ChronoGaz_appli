@@ -1,4 +1,5 @@
 import api from './api';    
+import { authService } from './authService';
     
 const planificationService = {    
   // Obtenir toutes les planifications avec filtres    
@@ -15,6 +16,8 @@ const planificationService = {
         priority    
       } = params;    
     
+      console.log('🔍 [DEBUG] Paramètres de recherche:', params);
+      
       const response = await api.get('/planifications', {    
         params: {    
           page,    
@@ -27,6 +30,14 @@ const planificationService = {
           priority    
         }    
       });    
+
+      console.log('📡 [DEBUG] Réponse API brute:', response.data);
+      console.log('📊 [DEBUG] Structure de la réponse:', {
+        success: response.data.success,
+        count: response.data.count,
+        dataLength: response.data.data?.length,
+        pagination: response.data.pagination
+      });
     
       // CORRIGÉ : Retourner les données brutes de l'API sans transformation excessive  
       // pour correspondre à la structure JSON réelle  
@@ -36,7 +47,7 @@ const planificationService = {
         pagination: response.data.pagination || {}    
       };    
     } catch (error) {    
-      console.error('Erreur récupération planifications:', error);    
+      console.error('❌ Erreur récupération planifications:', error);    
       throw error;    
     }    
   },    
@@ -94,12 +105,80 @@ const planificationService = {
   // Obtenir les planifications par employé    
   async getPlanificationsByEmployee(employeeId) {    
     try {    
-      return await this.getPlanifications({     
+      console.log('🔍 [DEBUG] Récupération planifications pour employé:', employeeId);
+      
+      // 1. D'abord, essayer de récupérer les planifications où l'employé est assigné comme chauffeur
+      let planifications = await this.getPlanifications({     
         livreur_employee_id: employeeId,    
         etat: 'PLANIFIE'    
-      });    
+      });
+      
+      console.log('👤 [DEBUG] Planifications avec chauffeur assigné:', planifications.data.length);
+      
+      // 2. Si aucune planification trouvée, essayer de récupérer par camion
+      // Il faut d'abord récupérer l'employé pour connaître son camion assigné
+      if (planifications.data.length === 0) {
+        try {
+          console.log('🚛 [DEBUG] Aucune planification directe, tentative par camion...');
+          const userResponse = await fetch(`${process.env.REACT_APP_API_URL || 'http://localhost:5000'}/api/users/profile`, {
+            headers: {
+              'Authorization': `Bearer ${authService.getToken()}`,
+              'Content-Type': 'application/json'
+            }
+          });
+          
+          if (userResponse.ok) {
+            const userData = await userResponse.json();
+            console.log('👤 [DEBUG] Données utilisateur:', userData.data?.employee_info);
+            
+            if (userData.success && userData.data.employee_info?.truck_id) {
+              const truckId = userData.data.employee_info.truck_id;
+              console.log('🚛 [DEBUG] Employé assigné au camion:', truckId);
+              
+              // Récupérer les planifications pour ce camion
+              const truckPlanifications = await this.getPlanifications({     
+                trucks_id: truckId,    
+                etat: 'PLANIFIE'    
+              });
+              
+              console.log('🚛 [DEBUG] Planifications trouvées pour le camion:', truckPlanifications.data.length);
+              planifications = truckPlanifications;
+            } else {
+              console.log('⚠️ [DEBUG] Aucun camion assigné à cet employé');
+            }
+          }
+        } catch (error) {
+          console.warn('⚠️ [WARN] Impossible de récupérer les planifications par camion:', error);
+        }
+      }
+      
+      // 3. Si toujours rien, essayer de récupérer toutes les planifications PLANIFIE (pour debug)
+      if (planifications.data.length === 0) {
+        console.log('🔍 [DEBUG] Aucune planification trouvée, tentative de récupération générale...');
+        try {
+          const allPlanifications = await this.getPlanifications({ etat: 'PLANIFIE' });
+          console.log('🌍 [DEBUG] Toutes les planifications PLANIFIE:', allPlanifications.data.length);
+          
+          if (allPlanifications.data.length > 0) {
+            console.log('🔍 [DEBUG] Première planification (exemple):', {
+              id: allPlanifications.data[0]._id,
+              commande: allPlanifications.data[0].commande_id?.numero_commande,
+              camion: allPlanifications.data[0].trucks_id?.matricule,
+              chauffeur: allPlanifications.data[0].livreur_employee_id
+            });
+            
+            // ✅ CORRECTION: Retourner les planifications trouvées !
+            console.log('✅ [DEBUG] Retour des planifications générales trouvées');
+            planifications = allPlanifications;
+          }
+        } catch (error) {
+          console.warn('⚠️ [WARN] Impossible de récupérer toutes les planifications:', error);
+        }
+      }
+      
+      return planifications;
     } catch (error) {    
-      console.error('Erreur récupération planifications par employé:', error);    
+      console.error('❌ Erreur récupération planifications par employé:', error);    
       throw error;    
     }    
   },    

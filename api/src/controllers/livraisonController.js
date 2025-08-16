@@ -11,6 +11,8 @@ const startLivraison = async (req, res) => {
     const { planificationId } = req.params;    
     const { latitude, longitude, details } = req.body;    
     
+    console.log('🚀 [DEBUG] Démarrage livraison pour planification:', planificationId);
+    
     const planification = await Planification.findById(planificationId)    
       .populate('commande_id')    
       .populate('trucks_id')    
@@ -23,6 +25,13 @@ const startLivraison = async (req, res) => {
       });    
     }    
     
+    console.log('📋 [DEBUG] Planification trouvée:', {
+      id: planification._id,
+      etat: planification.etat,
+      livreur: planification.livreur_employee_id,
+      camion: planification.trucks_id?.matricule
+    });
+    
     // Vérifier qu'il n'y a pas déjà une livraison    
     const livraisonExistante = await Livraison.findOne({ planification_id: planificationId });    
     if (livraisonExistante) {    
@@ -32,11 +41,27 @@ const startLivraison = async (req, res) => {
       });    
     }    
     
+    // ✅ CORRECTION: Récupérer le chauffeur du camion si pas assigné à la planification
+    let livreurId = planification.livreur_employee_id?._id;
+    if (!livreurId && planification.trucks_id?.driver) {
+      livreurId = planification.trucks_id.driver;
+      console.log('🚛 [DEBUG] Chauffeur récupéré depuis le camion:', livreurId);
+    }
+    
+    if (!livreurId) {
+      return res.status(400).json({
+        success: false,
+        message: 'Aucun chauffeur assigné à cette planification ou au camion'
+      });
+    }
+    
+    console.log('👤 [DEBUG] Chauffeur final pour la livraison:', livreurId);
+    
     // Créer la livraison    
     const nouvelleLivraison = new Livraison({    
       planification_id: planificationId,    
       date: new Date(),    
-      livreur_employee_id: planification.livreur_employee_id._id,    
+      livreur_employee_id: livreurId,    
       trucks_id: planification.trucks_id._id,    
       etat: 'EN_COURS',    
       latitude,    
@@ -48,10 +73,12 @@ const startLivraison = async (req, res) => {
     });    
     
     await nouvelleLivraison.save();    
+    console.log('✅ [DEBUG] Livraison créée avec ID:', nouvelleLivraison._id);
     
     // Mettre à jour l'état de la planification    
     planification.etat = 'EN_COURS';    
     await planification.save();    
+    console.log('✅ [DEBUG] Planification mise à jour: EN_COURS');
     
     // Copier les lignes de commande vers les lignes de livraison    
     const lignesCommande = await CommandeLine.find({     
@@ -68,6 +95,7 @@ const startLivraison = async (req, res) => {
     }));    
     
     await LivraisonLine.insertMany(lignesLivraison);    
+    console.log('✅ [DEBUG] Lignes de livraison créées:', lignesLivraison.length);
     
     res.status(201).json({    
       success: true,    
@@ -76,7 +104,7 @@ const startLivraison = async (req, res) => {
     });    
     
   } catch (error) {    
-    console.error('Erreur lors du démarrage de la livraison:', error);    
+    console.error('❌ Erreur lors du démarrage de la livraison:', error);    
     res.status(500).json({    
       success: false,    
       message: error.message    

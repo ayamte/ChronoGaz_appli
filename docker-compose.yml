@@ -1,7 +1,7 @@
 services:          
   mongodb:          
     image: mongo:latest          
-    container_name: chronogaz_mongo_db          
+    container_name: chronogaz_mongo_db2          
     restart: unless-stopped          
     ports:          
       - "27017:27017"          
@@ -22,7 +22,7 @@ services:
           
   app:          
     build: ./api          
-    container_name: chronogaz_app          
+    container_name: chronogaz_app2          
     restart: unless-stopped          
     ports:          
       - "5000:5000"          
@@ -39,7 +39,7 @@ services:
         
   frontend:        
     build: ./client        
-    container_name: chronogaz_frontend        
+    container_name: chronogaz_frontend2        
     restart: unless-stopped        
     ports:        
       - "3000:3000"        

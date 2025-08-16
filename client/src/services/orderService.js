@@ -275,13 +275,19 @@ export const orderService = {
   // Fonction pour assigner un camion
   async assignTruck(orderId, assignmentData) {
     try {
+      console.log('🚛 [DEBUG] Assignation camion:', { orderId, assignmentData });
+      
       const response = await api.post(`/planifications`, {
         commande_id: orderId,
-        ...assignmentData
+        truck_id: assignmentData.truckId,
+        priority: assignmentData.priority,
+        delivery_date: assignmentData.scheduledDate
       });
+      
+      console.log('✅ [DEBUG] Réponse assignation:', response.data);
       return response.data.data;
     } catch (error) {
-      console.error('Erreur assignTruck:', error);
+      console.error('❌ Erreur assignTruck:', error);
       throw error;
     }
   },
@@ -289,10 +295,13 @@ export const orderService = {
   // Fonction pour annuler une assignation
   async cancelAssignment(orderId) {
     try {
+      console.log('🚫 [DEBUG] Annulation assignation pour commande:', orderId);
+      
       const response = await api.delete(`/planifications/commande/${orderId}`);
+      console.log('✅ [DEBUG] Réponse annulation:', response.data);
       return response.data;
     } catch (error) {
-      console.error('Erreur cancelAssignment:', error);
+      console.error('❌ Erreur cancelAssignment:', error);
       throw error;
     }
   },

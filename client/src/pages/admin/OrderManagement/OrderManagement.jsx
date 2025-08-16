@@ -258,11 +258,67 @@ const OrderManagement = () => {
     
   const handleViewDetails = useCallback(async (order) => {    
     try {    
-      const detailedOrder = await orderService.getOrder(order.id);    
-      setSelectedOrder(detailedOrder);    
-      setIsDetailsModalOpen(true);    
+      console.log('🔍 [DEBUG] Récupération détails pour commande:', order.id);
+      
+      // 1. Récupérer les détails de la commande
+      const detailedOrder = await orderService.getOrder(order.id);
+      console.log('📋 [DEBUG] Détails commande:', detailedOrder);
+      
+      // 2. ✅ NOUVEAU: Récupérer les informations de planification
+      let planificationData = null;
+      try {
+        const planificationResponse = await fetch(`${process.env.REACT_APP_API_URL || 'http://localhost:5000'}/api/planifications?commande_id=${order.id}`, {
+          headers: {
+            'Authorization': `Bearer ${authService.getToken()}`,
+            'Content-Type': 'application/json'
+          }
+        });
+        
+        if (planificationResponse.ok) {
+          const planificationResult = await planificationResponse.json();
+          if (planificationResult.success && planificationResult.data.length > 0) {
+            planificationData = planificationResult.data[0];
+            console.log('📋 [DEBUG] Planification trouvée:', planificationData);
+          }
+        }
+      } catch (error) {
+        console.warn('⚠️ [WARN] Impossible de récupérer la planification:', error);
+      }
+      
+      // 3. ✅ NOUVEAU: Récupérer les informations de livraison
+      let livraisonData = null;
+      try {
+        const livraisonResponse = await fetch(`${process.env.REACT_APP_API_URL || 'http://localhost:5000'}/api/livraisons?planification_id=${planificationData?._id || ''}`, {
+          headers: {
+            'Authorization': `Bearer ${authService.getToken()}`,
+            'Content-Type': 'application/json'
+          }
+        });
+        
+        if (livraisonResponse.ok) {
+          const livraisonResult = await livraisonResponse.json();
+          if (livraisonResult.success && livraisonResult.data.length > 0) {
+            livraisonData = livraisonResult.data[0];
+            console.log('🚚 [DEBUG] Livraison trouvée:', livraisonData);
+          }
+        }
+      } catch (error) {
+        console.warn('⚠️ [WARN] Impossible de récupérer la livraison:', error);
+      }
+      
+      // 4. Combiner toutes les données
+      const enrichedOrder = {
+        ...detailedOrder,
+        planification: planificationData,
+        livraison: livraisonData
+      };
+      
+      console.log('✅ [DEBUG] Commande enrichie:', enrichedOrder);
+      setSelectedOrder(enrichedOrder);
+      setIsDetailsModalOpen(true);
+      
     } catch (error) {    
-      console.error('Erreur lors du chargement des détails:', error);    
+      console.error('❌ Erreur lors du chargement des détails:', error);    
       showNotification('Erreur lors du chargement des détails', 'error');    
     }    
   }, [showNotification]);    
@@ -279,9 +335,9 @@ const OrderManagement = () => {
     try {    
       // ✅ MODIFIÉ: Payload pour la nouvelle API de planification  
       const payload = {    
-        truck_id: assignmentData.truckId,    
+        truckId: assignmentData.truckId,    
         priority: assignmentData.priority,    
-        delivery_date: assignmentData.scheduledDate    
+        scheduledDate: assignmentData.scheduledDate    
       };    
     
       await orderService.assignTruck(selectedOrder.id, payload);  
@@ -447,6 +503,69 @@ const getTruckInfo = (order) => {
     };  
   }  
   return null;  
+};
+
+// ✅ NOUVEAU: Fonction pour obtenir l'état de livraison
+const getDeliveryStatus = (order) => {
+  // Si la commande a une livraison, afficher son état
+  if (order.livraison) {
+    return {
+      status: order.livraison.etat,
+      text: getDeliveryStatusText(order.livraison.etat),
+      color: getDeliveryStatusColor(order.livraison.etat)
+    };
+  }
+  
+  // Si la commande a une planification, afficher son état
+  if (order.planification) {
+    return {
+      status: order.planification.etat,
+      text: getDeliveryStatusText(order.planification.etat),
+      color: getDeliveryStatusColor(order.planification.etat)
+    };
+  }
+  
+  // Si la commande est assignée mais pas encore planifiée
+  if (order.status === 'assigned') {
+    return {
+      status: 'PLANIFIE',
+      text: 'Planifiée',
+      color: 'om-delivery-status-planned'
+    };
+  }
+  
+  // Par défaut
+  return {
+    status: 'PENDING',
+    text: 'En attente',
+    color: 'om-delivery-status-pending'
+  };
+};
+
+// ✅ NOUVEAU: Fonction pour obtenir le texte de l'état de livraison
+const getDeliveryStatusText = (status) => {
+  const statusTexts = {
+    'PENDING': 'En attente',
+    'PLANIFIE': 'Planifiée',
+    'EN_COURS': 'En cours',
+    'LIVRE': 'Livrée',
+    'ANNULE': 'Annulée',
+    'REPORTE': 'Reportée'
+  };
+  return statusTexts[status] || status;
+};
+
+// ✅ NOUVEAU: Fonction pour obtenir la couleur de l'état de livraison
+const getDeliveryStatusColor = (status) => {
+  const statusColors = {
+    'PENDING': 'om-delivery-status-pending',
+    'PLANIFIE': 'om-delivery-status-planned',
+    'EN_COURS': 'om-delivery-status-in-progress',
+    'LIVRE': 'om-delivery-status-delivered',
+    'ANNULE': 'om-delivery-status-cancelled',
+    'REPORTE': 'om-delivery-status-postponed'
+  };
+  return statusColors[status] || 'om-delivery-status-default';
 };
     
   // Loading state - affichage initial    
@@ -661,6 +780,7 @@ const getTruckInfo = (order) => {
                         <th>Statut</th>    
                         <th>Priorité</th>    
                         <th>Camion Assigné</th>    
+                        <th>État Livraison</th>    
                         <th>Montant</th>    
                         <th>Actions</th>    
                       </tr>    
@@ -718,6 +838,16 @@ const getTruckInfo = (order) => {
                                   </div>    
                                 ) : (    
                                   <span className="om-not-assigned">Non assigné</span>    
+                                );    
+                              })()}    
+                            </td>    
+                            <td>    
+                              {(() => {    
+                                const deliveryStatus = getDeliveryStatus(order);    
+                                return (    
+                                  <div className={`om-delivery-status-badge ${deliveryStatus.color}`}>    
+                                    <span className="om-delivery-status-text">{deliveryStatus.text}</span>    
+                                  </div>    
                                 );    
                               })()}    
                             </td>    
