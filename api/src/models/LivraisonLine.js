@@ -32,7 +32,7 @@ const LivraisonLineSchema = new mongoose.Schema({
   // Unité de mesure  
   UM_id: {   
     type: mongoose.Schema.Types.ObjectId,   
-    ref: 'UM',   
+    ref: 'Um',   
     required: true   
   },  
     

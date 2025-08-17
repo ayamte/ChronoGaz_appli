@@ -1,10 +1,10 @@
 const express = require('express');  
 const router = express.Router();  
 const evaluationController = require('../controllers/evaluationController');  
-const authMiddleware = require('../middleware/authMiddleware');  
+const { authenticateToken } = require('../middleware/authMiddleware'); 
   
 // Toutes les routes nécessitent une authentification  
-router.use(authMiddleware);  
+router.use(authenticateToken); 
   
 // POST /api/evaluations - Créer une évaluation  
 router.post('/', evaluationController.createEvaluation);  
