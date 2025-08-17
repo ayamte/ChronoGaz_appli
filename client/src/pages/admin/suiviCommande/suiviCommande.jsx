@@ -1,15 +1,23 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
-import {
-  MdSearch as Search,
-  MdVisibility as Eye,
-  MdClose as X,
-  MdStar as Star,
-  MdStarBorder as StarBorder,
-  MdFilterList as Filter,
-  MdRefresh as Refresh
-} from "react-icons/md";
+import { 
+  Search, 
+  Filter, 
+  Eye, 
+  Star, 
+  StarOff, 
+  Phone, 
+  MapPin, 
+  Calendar,
+  Truck,
+  User,
+  Package,
+  X,
+  RotateCcw
+} from 'lucide-react';
 import { orderService } from '../../../services/orderService';
-import { authService } from '../../../services/authService';
+import truckService from '../../../services/truckService';
+import { planificationService } from '../../../services/planificationService';
+import { livraisonService } from '../../../services/livraisonService';
 import LoadingSpinner from '../../../components/common/LoadingSpinner';
 import Pagination from '../../../components/common/Pagination';
 import "./suiviCommande.css";
@@ -266,37 +274,150 @@ export default function OrderTrackingManagement() {
 };
 
   const getTruckInfo = (order) => {
-    if (order.assignedTruck) return order.assignedTruck;
+    console.log('🚛 [DEBUG] getTruckInfo - Order reçu:', order);
+    console.log('🚛 [DEBUG] assignedTruck:', order.assignedTruck);
+    console.log('🚛 [DEBUG] planification:', order.planification);
+    console.log('🚛 [DEBUG] livraison:', order.livraison);
+    
+    // 1. Priorité: Camion assigné directement
+    if (order.assignedTruck) {
+      console.log('🚛 [DEBUG] Utilisation assignedTruck:', order.assignedTruck);
+      return order.assignedTruck;
+    }
+    
+    // 2. Priorité: Camion depuis la planification
     if (order.planification?.trucks_id) {
+      console.log('🚛 [DEBUG] Utilisation planification.trucks_id:', order.planification.trucks_id);
       return {
         plateNumber: order.planification.trucks_id.matricule || 'N/A',
-        model: order.planification.trucks_id.marque || 'N/A'
+        model: order.planification.trucks_id.brand && order.planification.trucks_id.modele ? 
+          `${order.planification.trucks_id.brand} ${order.planification.trucks_id.modele}` : 'N/A',
+        capacity: order.planification.trucks_id.capacite || 'N/A'
       };
     }
+    
+    // 3. Priorité: Camion depuis la livraison
+    if (order.livraison?.trucks_id) {
+      console.log('🚛 [DEBUG] Utilisation livraison.trucks_id:', order.livraison.trucks_id);
+      return {
+        plateNumber: order.livraison.trucks_id.matricule || 'N/A',
+        model: order.livraison.trucks_id.brand && order.livraison.trucks_id.modele ? 
+          `${order.livraison.trucks_id.brand} ${order.livraison.trucks_id.modele}` : 'N/A',
+        capacity: order.livraison.trucks_id.capacite || 'N/A'
+      };
+    }
+    
+    console.log('🚛 [DEBUG] Aucune information de camion trouvée');
     return null;
   };
 
   const getDriverInfo = (order) => {
-    if (order.planification?.livreur_employee_id?.physical_user_id) {
-      const driver = order.planification.livreur_employee_id.physical_user_id;
+    console.log('👤 [DEBUG] getDriverInfo - Order reçu:', order);
+    
+    // 1. Priorité: Chauffeur depuis la livraison
+    if (order.livraison?.livreur_employee_id) {
+      console.log('👤 [DEBUG] Utilisation livraison.livreur_employee_id:', order.livraison.livreur_employee_id);
+      if (order.livraison.livreur_employee_id.physical_user_id) {
+        const driver = order.livraison.livreur_employee_id.physical_user_id;
+        return {
+          name: `${driver.first_name} ${driver.last_name}`,
+          matricule: order.livraison.livreur_employee_id.matricule || 'N/A',
+          phone: driver.telephone_principal || 'N/A'
+        };
+      } else {
+        return {
+          name: 'Chauffeur assigné',
+          matricule: order.livraison.livreur_employee_id.matricule || 'N/A',
+          phone: 'N/A'
+        };
+      }
+    }
+    
+    // 2. Priorité: Chauffeur depuis la planification
+    if (order.planification?.livreur_employee_id) {
+      console.log('👤 [DEBUG] Utilisation planification.livreur_employee_id:', order.planification.livreur_employee_id);
+      if (order.planification.livreur_employee_id.physical_user_id) {
+        const driver = order.planification.livreur_employee_id.physical_user_id;
+        return {
+          name: `${driver.first_name} ${driver.last_name}`,
+          matricule: order.planification.livreur_employee_id.matricule || 'N/A',
+          phone: driver.telephone_principal || 'N/A'
+        };
+      } else {
+        return {
+          name: 'Chauffeur assigné',
+          matricule: order.planification.livreur_employee_id.matricule || 'N/A',
+          phone: 'N/A'
+        };
+      }
+    }
+    
+    // 3. Priorité: Chauffeur depuis le camion assigné
+    if (order.assignedTruck?.driver) {
+      console.log('👤 [DEBUG] Utilisation assignedTruck.driver:', order.assignedTruck.driver);
       return {
-        name: `${driver.first_name} ${driver.last_name}`,
-        matricule: order.planification.livreur_employee_id.matricule || 'N/A',
-        phone: driver.telephone_principal || 'N/A'
+        name: order.assignedTruck.driver.name || 'Chauffeur du camion',
+        matricule: order.assignedTruck.driver.matricule || 'N/A',
+        phone: order.assignedTruck.driver.phone || 'N/A'
       };
     }
+    
+    console.log('👤 [DEBUG] Aucune information de chauffeur trouvée');
     return { name: 'Non assigné', matricule: 'N/A', phone: 'N/A' };
   };
 
   const getAccompagnantInfo = (order) => {
-    if (order.planification?.accompagnateur_id?.physical_user_id) {
-      const accompagnant = order.planification.accompagnateur_id.physical_user_id;
+    console.log('👥 [DEBUG] getAccompagnantInfo - Order reçu:', order);
+    
+    // 1. Priorité: Accompagnant depuis la livraison
+    if (order.livraison?.accompagnateur_id) {
+      console.log('👥 [DEBUG] Utilisation livraison.accompagnateur_id:', order.livraison.accompagnateur_id);
+      if (order.livraison.accompagnateur_id.physical_user_id) {
+        const accompagnant = order.livraison.accompagnateur_id.physical_user_id;
+        return {
+          name: `${accompagnant.first_name} ${accompagnant.last_name}`,
+          matricule: order.livraison.accompagnateur_id.matricule || 'N/A',
+          phone: accompagnant.telephone_principal || 'N/A'
+        };
+      } else {
+        return {
+          name: 'Accompagnant assigné',
+          matricule: order.livraison.accompagnateur_id.matricule || 'N/A',
+          phone: 'N/A'
+        };
+      }
+    }
+    
+    // 2. Priorité: Accompagnant depuis la planification
+    if (order.planification?.accompagnateur_id) {
+      console.log('👥 [DEBUG] Utilisation planification.accompagnateur_id:', order.planification.accompagnateur_id);
+      if (order.planification.accompagnateur_id.physical_user_id) {
+        const accompagnant = order.planification.accompagnateur_id.physical_user_id;
+        return {
+          name: `${accompagnant.first_name} ${accompagnant.last_name}`,
+          matricule: order.planification.accompagnateur_id.matricule || 'N/A',
+          phone: accompagnant.telephone_principal || 'N/A'
+        };
+      } else {
+        return {
+          name: 'Accompagnant assigné',
+          matricule: order.planification.accompagnateur_id.matricule || 'N/A',
+          phone: 'N/A'
+        };
+      }
+    }
+    
+    // 3. Priorité: Accompagnant depuis le camion assigné
+    if (order.assignedTruck?.accompagnateur) {
+      console.log('👥 [DEBUG] Utilisation assignedTruck.accompagnateur:', order.assignedTruck.accompagnateur);
       return {
-        name: `${accompagnant.first_name} ${accompagnant.last_name}`,
-        matricule: order.planification.accompagnateur_id.matricule || 'N/A',
-        phone: accompagnant.telephone_principal || 'N/A'
+        name: order.assignedTruck.accompagnateur.name || 'Accompagnant du camion',
+        matricule: order.assignedTruck.accompagnateur.matricule || 'N/A',
+        phone: order.assignedTruck.accompagnateur.phone || 'N/A'
       };
     }
+    
+    console.log('👥 [DEBUG] Aucune information d\'accompagnant trouvée');
     return { name: 'Aucun', matricule: 'N/A', phone: 'N/A' };
   };
 
@@ -393,6 +514,64 @@ export default function OrderTrackingManagement() {
       
       const orderData = detailedOrder.data || detailedOrder;
       
+      // 🚛 NOUVEAU: Récupérer les données complètes du camion si disponible
+      let truckDetails = null;
+      if (order.planification?.trucks_id?._id || order.assignedTruckId) {
+        const truckId = order.planification?.trucks_id?._id || order.assignedTruckId;
+        console.log('🚛 [DEBUG] Récupération détails camion pour ID:', truckId);
+        try {
+          const truckResponse = await truckService.getTruckById(truckId);
+          if (truckResponse && truckResponse.data) {
+            truckDetails = truckResponse.data;
+            console.log('🚛 [DEBUG] Détails camion récupérés:', truckDetails);
+            
+            // 👤 NOUVEAU: Récupérer les données complètes du chauffeur
+            if (truckDetails.driver?.physical_user_id?._id) {
+              try {
+                const driverUserId = truckDetails.driver.physical_user_id._id;
+                console.log('👤 [DEBUG] Récupération données complètes chauffeur pour ID:', driverUserId);
+                const driverResponse = await fetch(`${process.env.REACT_APP_API_URL || 'http://localhost:5000'}/api/users/${driverUserId}`, {
+                  headers: {
+                    'Authorization': `Bearer ${localStorage.getItem('token')}`,
+                    'Content-Type': 'application/json'
+                  }
+                });
+                if (driverResponse.ok) {
+                  const driverData = await driverResponse.json();
+                  truckDetails.driver.physical_user_id = driverData.data || driverData;
+                  console.log('👤 [DEBUG] Données complètes chauffeur récupérées:', truckDetails.driver.physical_user_id);
+                }
+              } catch (driverError) {
+                console.warn('⚠️ [WARN] Impossible de récupérer les données complètes du chauffeur:', driverError);
+              }
+            }
+            
+            // 👥 NOUVEAU: Récupérer les données complètes de l'accompagnant
+            if (truckDetails.accompagnant?.physical_user_id?._id) {
+              try {
+                const accompagnantUserId = truckDetails.accompagnant.physical_user_id._id;
+                console.log('👥 [DEBUG] Récupération données complètes accompagnant pour ID:', accompagnantUserId);
+                const accompagnantResponse = await fetch(`${process.env.REACT_APP_API_URL || 'http://localhost:5000'}/api/users/${accompagnantUserId}`, {
+                  headers: {
+                    'Authorization': `Bearer ${localStorage.getItem('token')}`,
+                    'Content-Type': 'application/json'
+                  }
+                });
+                if (accompagnantResponse.ok) {
+                  const accompagnantData = await accompagnantResponse.json();
+                  truckDetails.accompagnant.physical_user_id = accompagnantData.data || accompagnantData;
+                  console.log('👥 [DEBUG] Données complètes accompagnant récupérées:', truckDetails.accompagnant.physical_user_id);
+                }
+              } catch (accompagnantError) {
+                console.warn('⚠️ [WARN] Impossible de récupérer les données complètes de l\'accompagnant:', accompagnantError);
+              }
+            }
+          }
+        } catch (truckError) {
+          console.warn('⚠️ [WARN] Impossible de récupérer les détails du camion:', truckError);
+        }
+      }
+      
       // 🔧 CORRECTION: Mapper les données de la commande originale vers la structure attendue
       const enrichedOrder = {
         ...orderData,
@@ -422,13 +601,34 @@ export default function OrderTrackingManagement() {
         orderNumber: orderData.orderNumber || order.orderNumber || order.numero_commande || 'N/A',  
         orderDate: orderData.orderDate || order.orderDate || order.createdAt,  
           
-        // Mapper assignedTruck pour compatibilité  
-        assignedTruck: orderData.assignedTruck || order.assignedTruck  
-      };  
+        // 🚛 NOUVEAU: Mapper assignedTruck avec les détails complets du camion
+        // MAIS: Priorité aux données de planification pour les téléphones
+        assignedTruck: truckDetails ? {
+          id: truckDetails._id,
+          plateNumber: truckDetails.matricule,
+          model: truckDetails.brand && truckDetails.modele ? 
+            `${truckDetails.brand} ${truckDetails.modele}` : 'N/A',
+          capacity: truckDetails.capacite,
+          driver: truckDetails.driver ? {
+            name: `${truckDetails.driver.physical_user_id?.first_name || ''} ${truckDetails.driver.physical_user_id?.last_name || ''}`.trim(),
+            matricule: truckDetails.driver.matricule,
+            phone: truckDetails.driver.physical_user_id?.telephone_principal || 'N/A'
+          } : null,
+          accompagnateur: truckDetails.accompagnant ? {
+            name: `${truckDetails.accompagnant.physical_user_id?.first_name || ''} ${truckDetails.accompagnant.physical_user_id?.last_name || ''}`.trim(),
+            matricule: truckDetails.accompagnant.matricule,
+            phone: truckDetails.accompagnant.physical_user_id?.telephone_principal || 'N/A'
+          } : null
+        } : (orderData.assignedTruck || order.assignedTruck),
+        
+        // 🚛 NOUVEAU: Forcer l'utilisation des données de planification pour les téléphones
+        forceUsePlanification: true
+      };
         
       console.log('🎨 [DEBUG] Données enrichies avec planification/livraison:', enrichedOrder);  
       console.log('🔍 [DEBUG] Planification mappée:', enrichedOrder.planification);  
       console.log('🔍 [DEBUG] Livraison mappée:', enrichedOrder.livraison);  
+      console.log('🚛 [DEBUG] AssignedTruck enrichi:', enrichedOrder.assignedTruck);
         
       setSelectedOrder(enrichedOrder);  
       setIsDetailsModalOpen(true);  
@@ -451,7 +651,7 @@ export default function OrderTrackingManagement() {
       stars.push(  
         i <= numRating ?   
         <Star key={i} className="tracking-star-filled" /> :   
-        <StarBorder key={i} className="tracking-star-empty" />  
+        <StarOff key={i} className="tracking-star-empty" />  
       );  
     }  
     return stars;  
@@ -485,7 +685,7 @@ export default function OrderTrackingManagement() {
                 disabled={loading}  
                 title="Actualiser"  
               >  
-                <Refresh className={`tracking-refresh-icon ${loading ? 'tracking-spinning' : ''}`} />  
+                <RotateCcw className={`tracking-refresh-icon ${loading ? 'tracking-spinning' : ''}`} />  
                 Actualiser  
               </button>  
             </div>  

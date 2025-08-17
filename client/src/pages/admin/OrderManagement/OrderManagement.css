@@ -499,65 +499,6 @@ body.sidebar-collapsed .om-wrapper {
   color: white;
 }
 
-/* ✅ NOUVEAU: Delivery Status Badges */
-.om-delivery-status-badge {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.1875rem;
-  padding: 0.15rem 0.3rem;   
-  font-size: 0.65rem;          
-  border-radius: 0.15rem; 
-  font-weight: 500;
-  max-width: fit-content;
-  border: 1px solid;
-}
-
-.om-delivery-status-pending {
-  background-color: #fef3c7;
-  color: #92400e;
-  border-color: #fde68a;
-}
-
-.om-delivery-status-planned {
-  background-color: #dbeafe;
-  color: #1e3a8a;
-  border-color: #bfdbfe;
-}
-
-.om-delivery-status-in-progress {
-  background-color: #e0e7ff;
-  color: #3730a3;
-  border-color: #c7d2fe;
-}
-
-.om-delivery-status-delivered {
-  background-color: #dcfce7;
-  color: #14532d;
-  border-color: #bbf7d0;
-}
-
-.om-delivery-status-cancelled {
-  background-color: #fee2e2;
-  color: #991b1b;
-  border-color: #fecaca;
-}
-
-.om-delivery-status-postponed {
-  background-color: #f3e8ff;
-  color: #581c87;
-  border-color: #ddd6fe;
-}
-
-.om-delivery-status-default {
-  background-color: #f3f4f6;
-  color: #374151;
-  border-color: #d1d5db;
-}
-
-.om-delivery-status-text {
-  margin-left: 0.1875rem;
-}
-
 .om-priority-icon {
   width: 0.7rem;               
   height: 0.7rem;  
