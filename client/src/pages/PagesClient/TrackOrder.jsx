@@ -35,11 +35,59 @@ const TrackOrder = () => {
         const orderResponse = await api.get(`/commands/${orderId}`);      
         console.log('Données de commande:', orderResponse.data);      
               
-        if (orderResponse.data.success) {      
-          setOrderData(orderResponse.data.data);      
-        } else {      
-          setError('Commande non trouvée');      
-        }      
+        if (orderResponse.data.success) {          
+          console.log('✅ Réponse API réussie');  
+          console.log('📊 Structure complète des données:', JSON.stringify(orderResponse.data.data, null, 2));  
+            
+          setOrderData(orderResponse.data.data);  
+            
+          // Logs de débogage détaillés  
+          console.log('🔍 Vérification des conditions de redirection:');  
+          console.log('   - Statut commande:', orderResponse.data.data?.command?.statut);  
+          console.log('   - ID livraison:', orderResponse.data.data?.livraison?._id);  
+          console.log('   - Condition statut LIVREE:', orderResponse.data.data?.command?.statut === 'LIVREE');  
+          console.log('   - Condition ID livraison existe:', !!orderResponse.data.data?.livraison?._id);  
+            
+          if (orderResponse.data.data?.command?.statut === 'LIVREE' &&       
+              orderResponse.data.data?.livraison?._id) {      
+            console.log('✅ Conditions remplies, vérification évaluation...');  
+              
+            try {      
+              console.log('🔄 Appel evaluationService.canEvaluateLivraison avec ID:', orderResponse.data.data.livraison._id);  
+                
+              const canEvaluate = await evaluationService.canEvaluateLivraison(      
+                orderResponse.data.data.livraison._id      
+              );      
+                
+              console.log('📋 Résultat canEvaluate:', canEvaluate);  
+                
+              if (canEvaluate) {      
+                console.log('🚀 Redirection vers ServiceEvaluation...');  
+                console.log('🔗 URL de redirection:', `/Serviceevaluation/${orderResponse.data.data.livraison._id}`);  
+                  
+                navigate(`/Serviceevaluation/${orderResponse.data.data.livraison._id}`);      
+                return;      
+              } else {  
+                console.log('❌ Évaluation non autorisée (déjà existante ou autre raison)');  
+              }  
+            } catch (error) {      
+              console.error('💥 Erreur lors de la vérification d\'évaluation:', error);  
+              console.error('📝 Détails de l\'erreur:', error.message);  
+              console.error('🔍 Stack trace:', error.stack);  
+            }      
+          } else {  
+            console.log('❌ Conditions non remplies pour la redirection');  
+            if (orderResponse.data.data?.command?.statut !== 'LIVREE') {  
+              console.log('   → Statut actuel:', orderResponse.data.data?.command?.statut, '(attendu: LIVREE)');  
+            }  
+            if (!orderResponse.data.data?.livraison?._id) {  
+              console.log('   → ID livraison manquant');  
+            }  
+          }  
+        } else {          
+          console.log('❌ Réponse API échouée');  
+          setError('Commande non trouvée');          
+        }    
       } catch (error) {      
         console.error('Erreur lors du chargement des données:', error);      
         setError('Erreur de connexion au serveur');      

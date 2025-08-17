@@ -223,12 +223,25 @@ const getCommandById = async (req, res) => {
         }  
       });  
   
+    // AJOUT : Récupérer la livraison si elle existe  
+    const livraison = planification ? await Livraison.findOne({ planification_id: planification._id })  
+      .populate({  
+        path: 'livreur_employee_id',  
+        select: 'matricule fonction physical_user_id',  
+        populate: {  
+          path: 'physical_user_id',  
+          select: 'first_name last_name telephone_principal'  
+        }  
+      })  
+      .populate('trucks_id', 'matricule marque') : null;  
+  
     res.status(200).json({  
       success: true,  
       data: {  
         command,  
         lignes: lignesCommande,  
-        planification  
+        planification,  
+        livraison  // AJOUT : Inclure la livraison dans la réponse  
       }  
     });  
   
