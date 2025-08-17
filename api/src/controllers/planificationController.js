@@ -103,7 +103,8 @@ const getPlanifications = async (req, res) => {
       })    
     );    
     
-    const count = await Planification.countDocuments(filter);    
+    const count = await Planification.countDocuments(filter);   
+     
     
     res.status(200).json({    
       success: true,    
@@ -287,6 +288,14 @@ const createPlanification = async (req, res) => {
         path: 'accompagnateur_id',  
         populate: { path: 'physical_user_id' }  
       });  
+
+    if (req.io) {  
+      req.io.emit('new_assignment', {  
+        employeeId: populatedPlanification.livreur_employee_id._id,  
+        orderId: populatedPlanification.commande_id._id,  
+        orderNumber: populatedPlanification.commande_id.numero_commande  
+      });  
+    }        
   
     res.status(201).json({  
       success: true,  

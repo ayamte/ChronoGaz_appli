@@ -405,6 +405,16 @@ const createCommand = async (req, res) => {
           }  
         ]  
       });  
+      console.log('🚀 [SERVER] Émission événement new_order pour:', commandeComplete.numero_commande);  
+      if (req.io) {  
+        req.io.emit('new_order', {  
+          orderId: commandeComplete._id,  
+          orderNumber: commandeComplete.numero_commande  
+        });  
+        console.log('✅ [SERVER] Événement new_order émis');  
+      } else {  
+        console.log('❌ [SERVER] req.io non disponible');  
+      }
   
     res.status(201).json({  
       success: true,  

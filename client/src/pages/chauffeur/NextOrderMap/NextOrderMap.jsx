@@ -22,6 +22,7 @@ import './NextOrderMap.css'
 import livraisonService from '../../../services/livraisonService'
 import { authService } from '../../../services/authService'
 import planificationService from '../../../services/planificationService'
+import { useWebSocket } from '../../../hooks/useWebSocket';  
 
 export default function NextOrderMapPage() {
   const [livraisons, setLivraisons] = useState([])
@@ -38,6 +39,54 @@ export default function NextOrderMapPage() {
   
   const API_BASE_URL = process.env.REACT_APP_API_URL || 'http://localhost:5000';
 
+  const { subscribe, isConnected } = useWebSocket(true);  
+
+useEffect(() => {    
+  console.log('🔌 [NextOrderMap] État connexion WebSocket:', isConnected);  
+  console.log('👤 [NextOrderMap] Current user employee_id:', currentUser?.employee_id);  
+    
+  if (currentUser?.employee_id && isConnected) {    
+    console.log('✅ [NextOrderMap] Abonnement aux événements WebSocket...');  
+      
+    const unsubscribe = subscribe('new_assignment', (data) => {    
+      console.log('📋 [NextOrderMap] Nouvelle assignation reçue:', data);  
+      console.log('🔍 [NextOrderMap] Comparaison IDs:', {  
+        received: data.employeeId,  
+        current: currentUser.employee_id,  
+        match: data.employeeId === currentUser.employee_id  
+      });  
+        
+      if (data.employeeId === currentUser.employee_id) {    
+        console.log('✅ [NextOrderMap] Assignation pour cet employé - rechargement...');  
+        refreshDeliveryData();  
+        setNotification({    
+          type: "info",    
+          message: `Nouvelle commande assignée: ${data.orderNumber}`    
+        });    
+      } else {  
+        console.log('❌ [NextOrderMap] Assignation pour un autre employé');  
+      }  
+    });    
+        
+    return unsubscribe;    
+  } else {  
+    console.log('❌ [NextOrderMap] Conditions non remplies:', {  
+      hasEmployeeId: !!currentUser?.employee_id,  
+      isConnected  
+    });  
+  }  
+}, [currentUser, isConnected, subscribe]);
+
+  useEffect(() => {    
+    if (isConnected) {    
+      const testSubscribe = subscribe('test', (data) => {    
+        console.log('🧪 [NextOrderMap] Événement test reçu:', data);    
+      });    
+          
+      return () => testSubscribe();    
+    }    
+  }, [isConnected, subscribe]);  
+  
   // Récupérer l'utilisateur connecté
   useEffect(() => {
     const fetchCurrentUser = async () => {
@@ -109,45 +158,52 @@ export default function NextOrderMapPage() {
     fetchCurrentUser()
   }, [])
 
+  useEffect(() => {    
+  console.log('🔌 [NextOrderMap] État connexion:', isConnected);    
+  console.log('📊 [NextOrderMap] Nombre de livraisons:', livraisons.length);    
+}, [isConnected, livraisons.length]);  
+
   // ✅ FONCTION CORRIGÉE: Analyse correcte des relations Planification-Livraison
-  const refreshDeliveryData = async () => {  
-    if (!currentUser?.employee_id) {  
-      console.log('⏳ ATTENTE: employee_id non disponible')  
-      return  
-    }  
-    
-    try {  
-      console.log('🔄 Rechargement des données...')  
-        
-       
-      const planificationsResponse = await planificationService.getPlanificationsByEmployee(currentUser.employee_id);  
-        
-      console.log('📋 Planifications brutes:', planificationsResponse.data?.length || 0)  
-        
-      // ✅ FILTRAGE SIMPLE: Exclure les commandes terminées  
-      const filteredPlanifications = planificationsResponse.data?.filter(planification => {  
-        const commandeStatut = planification.commande_id?.statut;  
-        const isCommandeTerminee = ['LIVREE', 'ANNULEE', 'ECHEC'].includes(commandeStatut);  
+const refreshDeliveryData = async () => {      
+  console.log('🔄 [NextOrderMap] Début refreshDeliveryData');    
+  console.log('👤 [NextOrderMap] Employee ID:', currentUser?.employee_id);    
+      
+  if (!currentUser?.employee_id) {      
+    console.log('⏳ [NextOrderMap] ATTENTE: employee_id non disponible')      
+    return      
+  }      
+      
+  try {      
+    console.log('📡 [NextOrderMap] Appel API getPlanificationsByEmployee...')      
+    const planificationsResponse = await planificationService.getPlanificationsByEmployee(currentUser.employee_id);      
           
-        console.log(`🔍 Planification ${planification._id}: commande ${commandeStatut}`)  
+    console.log('📋 [NextOrderMap] Planifications reçues:', planificationsResponse.data?.length || 0)      
+      
+    // ✅ FILTRAGE SIMPLE: Exclure les commandes terminées    
+    const filteredPlanifications = planificationsResponse.data?.filter(planification => {    
+      const commandeStatut = planification.commande_id?.statut;    
+      const isCommandeTerminee = ['LIVREE', 'ANNULEE', 'ECHEC'].includes(commandeStatut);    
           
-        // Garder seulement les commandes non terminées  
-        return !isCommandeTerminee;  
-      }) || [];  
+      console.log(`🔍 Planification ${planification._id}: commande ${commandeStatut}`)    
+          
+      // Garder seulement les commandes non terminées    
+      return !isCommandeTerminee;    
+    }) || [];    
         
-      console.log('✅ Résultat final:')  
-      console.log(`  - Planifications gardées: ${filteredPlanifications.length}`)  
-    
-      setLivraisons(filteredPlanifications);  
+    console.log('✅ Résultat final:')    
+    console.log(`  - Planifications gardées: ${filteredPlanifications.length}`)    
         
-    } catch (error) {  
-      console.error('💥 Erreur lors du rechargement:', error);  
-      setNotification({  
-        type: "error",  
-        message: `Erreur chargement: ${error.message}`  
-      })  
-    }  
-  };
+    console.log('✅ [NextOrderMap] Données mises à jour:', filteredPlanifications.length, 'planifications');    
+    setLivraisons(filteredPlanifications);      
+          
+  } catch (error) {      
+    console.error('💥 [NextOrderMap] Erreur lors du rechargement:', error);       
+    setNotification({    
+      type: "error",    
+      message: `Erreur chargement: ${error.message}`    
+    })    
+  }    
+};
 
   // Récupérer les données de livraison au chargement
   useEffect(() => {

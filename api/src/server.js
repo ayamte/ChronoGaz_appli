@@ -87,6 +87,8 @@ app.use((req, res, next) => {
   next();
 });
 
+
+
 // Setup WebSocket pour les commandes
 setupWebSocket(io);
 

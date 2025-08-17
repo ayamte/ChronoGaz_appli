@@ -195,6 +195,13 @@ const completeLivraison = async (req, res) => {
       planification.raison_annulation = details || 'Livraison annulée';
       await planification.save();
     }
+
+    if (req.io) {  
+      req.io.emit('order_status_updated', {  
+        orderId: livraison.planification_id.commande_id,  
+        status: nouvelEtat  
+      });  
+    }
     
     res.status(200).json({    
       success: true,    

@@ -24,6 +24,8 @@ import LoadingSpinner from '../../../components/common/LoadingSpinner';
 import Pagination from '../../../components/common/Pagination';    
 import OrderDetailsModal from './OrderDetailsModal';    
 import TruckAssignmentModal from './TruckAssignmentModal';    
+
+import { useOrderUpdates } from '../../../hooks/useOrderUpdates';  
     
 const API_BASE_URL = process.env.REACT_APP_API_URL || 'http://localhost:5000';    
     
@@ -38,7 +40,30 @@ const OrderManagement = () => {
       
   // États d'erreur    
   const [error, setError] = useState('');    
-  const [notification, setNotification] = useState(null);    
+  const [notification, setNotification] = useState(null);   
+  
+  const { newOrdersCount, isConnected } = useOrderUpdates();  
+
+  useEffect(() => {  
+    const handleRefresh = () => {  
+      console.log('🔄 [OrderManagement] Événement refreshOrders reçu');  
+      console.log('📊 [OrderManagement] État actuel - orders:', orders.length, 'loading:', loading);  
+      fetchOrders();  
+    };  
+    
+    console.log('👂 [OrderManagement] Ajout du listener refreshOrders');  
+    window.addEventListener('refreshOrders', handleRefresh);  
+      
+    return () => {  
+      console.log('🧹 [OrderManagement] Suppression du listener refreshOrders');  
+      window.removeEventListener('refreshOrders', handleRefresh);  
+    };  
+  }, []);
+
+  useEffect(() => {    
+    console.log('🔌 [OrderManagement] État connexion WebSocket:', isConnected);    
+    console.log('📊 [OrderManagement] Compteur nouvelles commandes:', newOrdersCount);    
+  }, [isConnected, newOrdersCount]);  
     
   // États pour les filtres et modales    
   const [filters, setFilters] = useState({    
@@ -86,6 +111,7 @@ const OrderManagement = () => {
     
   // ✅ MODIFIÉ: Utiliser le nouveau orderService  
   const fetchOrders = useCallback(async (currentFilters = null, currentPage = null) => {  
+    console.log('🔍 [OrderManagement] fetchOrders appelé - Trigger:', new Error().stack.split('\n')[2]);    
     if (!isMountedRef.current) return;  
           
     try {  
