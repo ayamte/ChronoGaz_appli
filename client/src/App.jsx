@@ -383,14 +383,14 @@ function App() {
                 </ProtectedRoute>          
               }           
             />          
-            <Route           
-              path="/Trackorder"           
-              element={          
-                <ProtectedRoute allowedRoles={['CLIENT']}>          
-                  <TrackOrder />          
-                </ProtectedRoute>          
-              }           
-            />          
+            <Route             
+              path="/Trackorder/:orderId?"             
+              element={            
+                <ProtectedRoute allowedRoles={['CLIENT']}>            
+                  <TrackOrder />            
+                </ProtectedRoute>            
+              }             
+            />         
             <Route           
               path="/Orderhistory"           
               element={          

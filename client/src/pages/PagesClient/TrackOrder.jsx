@@ -1,329 +1,243 @@
-import React from "react";
-import { useState, useEffect } from "react";
-import axios from 'axios';
-import Title from "../../components/client/TrackOrderPage/Title";
-import OrderStatusCard from "../../components/client/TrackOrderPage/OrderStatusCard";
-import OrderProgress from "../../components/client/TrackOrderPage/OrderProgress";
-import DeliveryDriverInfo from "../../components/client/TrackOrderPage/DeliveryDriverInfo";
-import InteractiveMap from "../../components/client/TrackOrderPage/InteractiveMap";
-import OrderSummary from "../../components/client/TrackOrderPage/OrderSummary";
-import CancelOrderButton from '../../components/client/TrackOrderPage/CancelOrderButton'; 
-import './TrackOrder.css'; 
-
-import { useParams } from 'react-router-dom';
-
-const TrackOrder = () => {
-  const [orderStatus, setOrderStatus] = useState(2);
-  const [deliveryPosition, setDeliveryPosition] = useState({
-    lat: 33.5731,
-    lng: -7.5898
-  });
-  const [destinationPosition, setDestinationPosition] = useState({
-    lat: 33.5831,
-    lng: -7.5798
-  });
-  const [manualAddress, setManualAddress] = useState("");
+import React from "react";  
+import { useState, useEffect } from "react";  
+import api from '../../services/api'; // 🔧 MODIFIÉ: Utiliser api au lieu d'axios  
+import Title from "../../components/client/TrackOrderPage/Title";  
+import OrderStatusCard from "../../components/client/TrackOrderPage/OrderStatusCard";  
+import OrderProgress from "../../components/client/TrackOrderPage/OrderProgress";  
+import DeliveryDriverInfo from "../../components/client/TrackOrderPage/DeliveryDriverInfo";  
+import InteractiveMap from "../../components/client/TrackOrderPage/InteractiveMap";  
+import OrderSummary from "../../components/client/TrackOrderPage/OrderSummary";  
+import CancelOrderButton from '../../components/client/TrackOrderPage/CancelOrderButton';   
+import './TrackOrder.css';   
   
-  // États pour les données de livraison
-  const [deliveryData, setDeliveryData] = useState(null);
-  const [orderData, setOrderData] = useState(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(null);
-
-  // Récupérer l'ID depuis les paramètres de l'URL ou utiliser l'ID de test
-  const { deliveryId } = useParams();
-  const currentDeliveryId = deliveryId || "688f7ea951209c4edf0a4cbc"; // id test
-
-  // Fetch des données de livraison et commande
-  useEffect(() => {
-    const fetchDeliveryData = async () => {
-      try {
-        setLoading(true);
-        setError(null);
-
-        // 1. Récupérer les données de la livraison
-        const deliveryResponse = await axios.get(`http://localhost:5001/api/deliveries/${currentDeliveryId}`);
-        
-        if (deliveryResponse.data.success) {
-          const delivery = deliveryResponse.data.data;
-          setDeliveryData(delivery);
-
-          // 2. Si on a une planification, récupérer les détails de la commande
-          if (delivery.planification_id && delivery.planification_id.commande_id) {
-            const commandId = delivery.planification_id.commande_id._id || delivery.planification_id.commande_id;
+import { useParams } from 'react-router-dom';  
+  
+const TrackOrder = () => {  
+  // États pour les données de livraison et commande  
+  const [deliveryData, setDeliveryData] = useState(null);  
+  const [orderData, setOrderData] = useState(null);  
+  const [loading, setLoading] = useState(true);  
+  const [error, setError] = useState(null);  
+  
+  // 🔧 MODIFIÉ: Récupérer l'ID de commande depuis les paramètres de l'URL  
+  const { orderId } = useParams();  
+  
+  // Fetch des données de commande réelles  
+  useEffect(() => {  
+    const fetchOrderData = async () => {  
+      if (!orderId) {  
+        setError('Aucun ID de commande fourni');  
+        setLoading(false);  
+        return;  
+      }  
+  
+      try {  
+        setLoading(true);  
+        setError(null);  
+  
+        // 🔧 MODIFIÉ: Utiliser api au lieu d'axios pour inclure le token automatiquement  
+        const orderResponse = await api.get(`/commands/${orderId}`);  
+        console.log('Données de commande:', orderResponse.data);  
+          
+        if (orderResponse.data.success) {  
+          setOrderData(orderResponse.data.data);  
             
-            try {
-              const commandResponse = await axios.get(`http://localhost:5001/api/commands/${commandId}`);
-              
-              if (commandResponse.data.success) {
-                setOrderData(commandResponse.data.data);
-              }
-            } catch (commandError) {
-              console.warn('Erreur lors de la récupération des détails de commande:', commandError);
-              // Utiliser les données de base de la livraison
-              setOrderData({
-                command: delivery.planification_id.commande_id,
-                lignes: [],
-                planification: delivery.planification_id
-              });
-            }
-          }
-
-          // 3. Mettre à jour la position de destination si disponible
-          const addressLivraison = delivery.planification_id?.commande_id?.address_livraison_id;
-          if (addressLivraison && addressLivraison.latitude && addressLivraison.longitude) {
-            setDestinationPosition({
-              lat: parseFloat(addressLivraison.latitude),
-              lng: parseFloat(addressLivraison.longitude)
-            });
-          }
-
-          // 4. Mettre à jour la position du livreur si disponible
-          if (delivery.latitude_livraison && delivery.longitude_livraison) {
-            setDeliveryPosition({
-              lat: parseFloat(delivery.latitude_livraison),
-              lng: parseFloat(delivery.longitude_livraison)
-            });
-          }
-
-        } else {
-          setError('Livraison non trouvée');
-        }
-
-      } catch (err) {
-        console.error('Erreur lors de la récupération des données:', err);
-        setError('Erreur de connexion au serveur');
-        
-        // Données de fallback pour le développement
-        setOrderData({
-          command: {
-            numero_commande: "GAZ-2024-001234",
-            date_commande: new Date(),
-            customer_id: { customer_code: "CLIENT001", type_client: "PARTICULIER" },
-            statut_id: { code: "EN_COURS", nom: "En cours" },
-            total_ttc: 270
-          },
-          lignes: [
-            {
-              product_id: { nom_long: "Bouteille Propane 34kg", reference: "PROP34" },
-              quantite: 2,
-              prix_unitaire: 100,
-              total_ligne: 200,
-              um_id: { nom: "Unité" }
-            }
-          ],
-          planification: null
-        });
-        
-      } finally {
-        setLoading(false);
-      }
-    };
-
-    if (currentDeliveryId) {
-      fetchDeliveryData();
-    }
-  }, [currentDeliveryId]);
-
-  const handlePositionUpdate = (position) => {
-    console.log('Position mise à jour:', position);
-    setDeliveryPosition({
-      lat: position.latitude,
-      lng: position.longitude
-    });
-  };
-
-  const handleStatusChange = (status) => {
-    console.log('Statut changé:', status);
-    // Mettre à jour le statut local si nécessaire
-    setOrderStatus(status);
-  };
+          // Si il y a une planification, chercher la livraison associée  
+          if (orderResponse.data.data.planification) {  
+            try {  
+              // 🔧 MODIFIÉ: Utiliser api au lieu d'axios  
+              const deliveryResponse = await api.get(`/livraisons/planification/${orderResponse.data.data.planification._id}`);  
+              console.log('Données de livraison:', deliveryResponse.data);  
+                
+              if (deliveryResponse.data.success) {  
+                setDeliveryData(deliveryResponse.data.data);  
+              }  
+            } catch (deliveryError) {  
+              console.warn('Pas encore de livraison pour cette commande:', deliveryError);  
+              // Pas d'erreur critique - la commande peut ne pas encore avoir de livraison  
+            }  
+          }  
+        } else {  
+          setError('Commande non trouvée');  
+        }  
+      } catch (error) {  
+        console.error('Erreur lors du chargement des données:', error);  
+        setError('Erreur de connexion au serveur');  
+      } finally {  
+        setLoading(false);  
+      }  
+    };  
   
-  // Position de destination depuis localStorage (fallback)
-  useEffect(() => {
-    const savedOrder = JSON.parse(localStorage.getItem('lastOrder'));
-    if (savedOrder && !destinationPosition.lat){
-      if (savedOrder.useGPS && savedOrder.gpsLocation){
-        setDestinationPosition({
-          lat: savedOrder.gpsLocation.latitude,
-          lng: savedOrder.gpsLocation.longitude
-        });
-      } else if (!savedOrder.useGPS) {
-        setManualAddress(savedOrder.address.fullAddress);
-      }
-    }
-  }, [destinationPosition.lat]);
+    fetchOrderData();  
+  }, [orderId]);  
   
-  // Simuler le mouvement du livreur vers la destination
-  useEffect(() => {
-    const interval = setInterval(() => {
-      setDeliveryPosition(prev => {
-        const latDiff = destinationPosition.lat - prev.lat;
-        const lngDiff = destinationPosition.lng - prev.lng;
-        const distance = Math.sqrt(latDiff * latDiff + lngDiff * lngDiff);
-        
-        if (distance > 0.001) {
-          return {
-            lat: prev.lat + (latDiff * 0.05) + (Math.random() - 0.5) * 0.0005,
-            lng: prev.lng + (lngDiff * 0.05) + (Math.random() - 0.5) * 0.0005
-          };
-        }
-        return prev;
-      });
-    }, 5000);
-
-    return () => clearInterval(interval);
-  }, [destinationPosition]);
-
-  // Données basées sur les données réelles ou fallback
-  const orderNumber = orderData?.command?.numero_commande || "GAZ-2024-001234";
+  // Données basées uniquement sur les données réelles  
+  const orderNumber = orderData?.command?.numero_commande || 'N/A';  
   
-  const statusSteps = [
-    { 
-      id: 0, 
-      title: "Commande confirmée", 
-      iconType: "check", 
-      time: "14:30",
-      description: "Votre commande a été confirmée"
-    },
-    { 
-      id: 1, 
-      title: "Préparation terminée", 
-      iconType: "package", 
-      time: "15:15",
-      description: "Votre commande est prête"
-    },
-    { 
-      id: 2, 
-      title: "En route", 
-      iconType: "truck", 
-      time: "15:45",
-      description: "Le livreur est en route vers vous"
-    },
-    { 
-      id: 3, 
-      title: "Livraison", 
-      iconType: "mappin", 
-      time: "16:30 (estimé)",
-      description: "Livraison en cours"
-    }
-  ];
-
-  // Informations du livreur depuis les données réelles
-  const deliveryDriver = deliveryData?.planification_id?.livreur_id ? {
-    name: `${deliveryData.planification_id.livreur_id.physical_user_id?.first_name || ''} ${deliveryData.planification_id.livreur_id.physical_user_id?.last_name || ''}`.trim(),
-    phone: deliveryData.planification_id.livreur_id.physical_user_id?.telephone_principal || "+212 6 12 34 56 78",
-    vehicle: deliveryData.planification_id.truck_id ? 
-      `${deliveryData.planification_id.truck_id.marque} - ${deliveryData.planification_id.truck_id.matricule}` : 
-      "Camionnette - ABC 1234"
-  } : {
-    name: "Ahmed Benali",
-    phone: "+212 6 12 34 56 78",
-    vehicle: "Camionnette - ABC 1234"
-  };
-
-  const getStatusDescription = () => {
-    if (deliveryData) {
-      switch(deliveryData.statut) {
-        case 'EN_COURS': return "Votre commande est en route vers vous";
-        case 'LIVREE': return "Votre commande a été livrée avec succès";
-        case 'ECHEC': return "Problème lors de la livraison";
-        default: return "Suivi de votre commande";
-      }
-    }
-    
-    switch(orderStatus) {
-      case 0: return "Votre commande a été confirmée avec succès";
-      case 1: return "Votre commande est en cours de préparation";
-      case 2: return "Votre commande est en route vers vous";
-      case 3: return "Le livreur est arrivé à destination";
-      default: return "Suivi de votre commande";
-    }
-  };
-
-  // Écran de chargement
-  if (loading) {
-    return (
-      <div className="min-h-screen bg-gray-50 flex justify-center items-center">
-        <div className="text-center">
-          <div className="animate-spin rounded-full h-32 w-32 border-b-2 border-blue-600 mx-auto mb-4"></div>
-          <div className="text-lg">Chargement des informations de livraison...</div>
-        </div>
-      </div>
-    );
-  }
-
-  return (
-          <div className="track-wrapper">  
-        <div className="track-container">  
-          <div className="track-content">  
-            <div className="track-page-content"> 
-    <div className="min-h-screen bg-gray-50">
-      <Title title="Suivre ma Commande" />
-
-      <div className="max-w-4xl mx-auto p-6">
-        {/* Message d'erreur si API échoue */}
-        {error && (
-          <div className="bg-yellow-100 border border-yellow-400 text-yellow-700 px-4 py-3 rounded mb-4">
-            <p>{error} - Affichage des données de test</p>
-          </div>
-        )}
-
-        <OrderStatusCard 
-          orderNumber={orderNumber}
-          statusDescription={getStatusDescription()}
-          estimatedTime="16:30"
-        />
-
-<OrderProgress 
-  orderStatus={orderStatus}
-  deliveryData={deliveryData}
-  orderData={orderData}
-/>
-
-        <DeliveryDriverInfo 
-          driver={deliveryDriver}
-          isVisible={orderStatus >= 2}
-        />
-
-        <InteractiveMap
-          deliveryId={currentDeliveryId}
-          isVisible={true}
-          autoCenter={true}
-          showRoute={true}
-          updateInterval={10000}
-          onPositionUpdate={handlePositionUpdate}
-          onStatusChange={handleStatusChange}
-        />   
-
-        {/* Passer les données en props au lieu de l'ID */}
-        <OrderSummary orderData={orderData} loading={loading} error={error} />
-
-        <CancelOrderButton
-          orderId={orderData?.command?._id}
-          currentStatus={orderData?.command?.statut_id?.code}
-          onCancelSuccess={() => {
-            setOrderData((prev) => ({
-              ...prev,
-              command: {
-                ...prev.command,
-                statut_id: {
-                  ...prev.command.statut_id,
-                  code: "ANNULEE",
-                  nom: "Annulée"
-                }
-              }
-            }));
-          }}
-        />
-
-      </div>
-    </div>
-           </div>  
+  // Informations du livreur depuis les données réelles uniquement  
+  const deliveryDriver = deliveryData?.planification_id?.livreur_employee_id ? {  
+    name: `${deliveryData.planification_id.livreur_employee_id.physical_user_id?.first_name || ''} ${deliveryData.planification_id.livreur_employee_id.physical_user_id?.last_name || ''}`.trim() || 'Chauffeur',  
+    phone: deliveryData.planification_id.livreur_employee_id.physical_user_id?.telephone_principal || null,  
+    vehicle: deliveryData.planification_id.trucks_id ?   
+      `${deliveryData.planification_id.trucks_id.marque} - ${deliveryData.planification_id.trucks_id.matricule}` :   
+      'Véhicule non spécifié'  
+  } : null;  
+  
+  // Description du statut basée uniquement sur les données réelles  
+  const getStatusDescription = () => {  
+    if (deliveryData) {  
+      switch(deliveryData.etat) {  
+        case 'EN_COURS': return "Votre commande est en cours de livraison";  
+        case 'LIVRE': return "Votre commande a été livrée avec succès";  
+        case 'ECHEC': return "Problème lors de la livraison";  
+        case 'PARTIELLE': return "Votre commande a été partiellement livrée";  
+        case 'ANNULE': return "Livraison annulée";  
+        default: return "Livraison en préparation";  
+      }  
+    }  
+      
+    // Basé sur les données de planification  
+    if (orderData?.planification) {  
+      switch(orderData.planification.etat) {  
+        case 'PLANIFIE': return "Votre commande est prête pour la livraison";  
+        case 'EN_COURS': return "Livraison en cours";  
+        case 'LIVRE': return "Votre commande a été livrée";  
+        case 'ANNULE': return "Commande annulée";  
+        default: return "Commande planifiée";  
+      }  
+    }  
+      
+    // État de base de la commande  
+    if (orderData?.command) {  
+      return "Votre commande a été confirmée avec succès";  
+    }  
+      
+    return "Chargement du statut...";  
+  };  
+  
+  // Temps estimé basé sur les données réelles  
+  const getEstimatedTime = () => {  
+    if (deliveryData?.date_livraison_prevue) {  
+      return new Date(deliveryData.date_livraison_prevue).toLocaleTimeString('fr-FR', {   
+        hour: '2-digit',   
+        minute: '2-digit'   
+      });  
+    }  
+    if (orderData?.planification?.date_livraison_prevue) {  
+      return new Date(orderData.planification.date_livraison_prevue).toLocaleTimeString('fr-FR', {   
+        hour: '2-digit',   
+        minute: '2-digit'   
+      });  
+    }  
+    return null; // Pas de temps estimé disponible  
+  };  
+  
+  // Écran de chargement  
+  if (loading) {  
+    return (  
+      <div className="min-h-screen bg-gray-50 flex justify-center items-center">  
+        <div className="text-center">  
+          <div className="animate-spin rounded-full h-32 w-32 border-b-2 border-blue-600 mx-auto mb-4"></div>  
+          <div className="text-lg">Chargement des informations de commande...</div>  
+        </div>  
       </div>  
-    </div>  
-  </div> 
-  );
-};
-
+    );  
+  }  
+  
+  // Écran d'erreur  
+  if (error) {  
+    return (  
+      <div className="min-h-screen bg-gray-50 flex justify-center items-center">  
+        <div className="text-center">  
+          <div className="text-red-500 mb-4">  
+            <svg className="w-16 h-16 mx-auto mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">  
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L3.732 16.5c-.77.833.192 2.5 1.732 2.5z" />  
+            </svg>  
+          </div>  
+          <h3 className="text-xl font-bold text-gray-900 mb-2">Erreur de chargement</h3>  
+          <p className="text-gray-600 mb-4">{error}</p>  
+          <button   
+            onClick={() => window.location.reload()}   
+            className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded"  
+          >  
+            Réessayer  
+          </button>  
+        </div>  
+      </div>  
+    );  
+  }  
+  
+  // Pas de données de commande  
+  if (!orderData) {  
+    return (  
+      <div className="min-h-screen bg-gray-50 flex justify-center items-center">  
+        <div className="text-center">  
+          <h3 className="text-xl font-bold text-gray-900 mb-2">Commande non trouvée</h3>  
+          <p className="text-gray-600">Aucune commande trouvée avec cet identifiant.</p>  
+        </div>  
+      </div>  
+    );  
+  }  
+  
+  return (  
+    <div className="track-wrapper">    
+      <div className="track-container">    
+        <div className="track-content">    
+          <div className="track-page-content">   
+            <div className="min-h-screen bg-gray-50">  
+              <Title title="Suivre ma Commande" />  
+  
+              <div className="max-w-4xl mx-auto p-6">  
+                <OrderStatusCard   
+                  orderNumber={orderNumber}  
+                  statusDescription={getStatusDescription()}  
+                  estimatedTime={getEstimatedTime()}  
+                />  
+  
+                <OrderProgress   
+                  deliveryData={deliveryData}  
+                  orderData={orderData}  
+                />  
+  
+                {deliveryDriver && (  
+                  <DeliveryDriverInfo   
+                    driver={deliveryDriver}  
+                    isVisible={true}  
+                  />  
+                )}  
+  
+                {/* Carte interactive seulement si livraison active */}  
+                {deliveryData && deliveryData.etat === 'EN_COURS' && (  
+                  <InteractiveMap  
+                    deliveryId={deliveryData._id}  
+                    isVisible={true}  
+                    autoCenter={true}  
+                    showRoute={true}  
+                    updateInterval={10000}  
+                  />  
+                )}  
+  
+                <OrderSummary   
+                  orderData={orderData}   
+                  loading={false}   
+                  error={null}   
+                />  
+  
+                <CancelOrderButton  
+                  orderId={orderData?.command?._id}  
+                  currentStatus={orderData?.command?.statut_id?.code}  
+                  onCancelSuccess={() => {  
+                    // Recharger les données après annulation  
+                    window.location.reload();  
+                  }}  
+                />  
+              </div>  
+            </div>  
+          </div>    
+        </div>    
+      </div>    
+    </div>   
+  );  
+};  
+  
 export default TrackOrder;

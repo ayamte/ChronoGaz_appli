@@ -258,33 +258,37 @@ const loadClientData = async () => {
   const total = subtotal + deliveryFee;        
       
   // ✅ Amélioration de la création de commande  
-  const handleConfirmOrder = async () => {          
-    try {          
-      const orderData = {          
-        products,          
-        quantities,          
-        prices,          
-        deliveryFee,          
-        subtotal,          
-        total,          
-        useGPS,          
-        gpsLocation,          
-        selectedExistingAddress,        
-        additionalInfo: '',    
-        // ✅ Passer l'adresse avec la structure complète  
-        address: address  
-      };          
+const handleConfirmOrder = async () => {            
+  try {            
+    const orderData = {            
+      products,            
+      quantities,            
+      prices,            
+      deliveryFee,            
+      subtotal,            
+      total,            
+      useGPS,            
+      gpsLocation,            
+      selectedExistingAddress,          
+      additionalInfo: '',      
+      address: address    
+    };            
               
-      const result = await createOrderFromSteps(orderData);          
-      console.log('✅ Commande créée avec succès:', result);          
+    const result = await createOrderFromSteps(orderData);            
+    console.log('✅ Commande créée avec succès:', result);            
               
-      // ✅ Amélioration de la redirection  
-      window.location.href = "/TrackOrder";          
-    } catch (error) {          
-      console.error('❌ Erreur création commande:', error);          
-      alert(`Erreur lors de la création de la commande: ${error.message || 'Erreur inconnue'}`);          
-    }          
-  };    
+    // 🔧 MODIFIÉ: Rediriger avec l'ID de la commande créée  
+    if (result && result._id) {  
+      window.location.href = `/TrackOrder/${result._id}`;  
+    } else {  
+      // Fallback si pas d'ID retourné  
+      window.location.href = "/TrackOrder";  
+    }           
+  } catch (error) {            
+    console.error('❌ Erreur création commande:', error);            
+    alert(`Erreur lors de la création de la commande: ${error.message || 'Erreur inconnue'}`);            
+  }            
+};  
       
   const orderData = {        
     products,        
