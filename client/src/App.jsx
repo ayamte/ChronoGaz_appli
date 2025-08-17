@@ -399,14 +399,14 @@ function App() {
                 </ProtectedRoute>          
               }           
             />          
-            <Route           
-              path="/Serviceevaluation"           
-              element={          
-                <ProtectedRoute allowedRoles={['CLIENT']}>          
-                  <ServiceEvaluation />          
-                </ProtectedRoute>          
-              }           
-            />    
+            <Route             
+              path="/Serviceevaluation/:livraisonId"             
+              element={            
+                <ProtectedRoute allowedRoles={['CLIENT']}>            
+                  <ServiceEvaluation />            
+                </ProtectedRoute>            
+              }             
+            />  
              <Route     
               path="/profile"     
               element={    
