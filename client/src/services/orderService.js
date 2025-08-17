@@ -129,8 +129,8 @@ export const orderService = {
       const transformedData = response.data.data.map(command => ({    
         id: command._id,    
         orderNumber: command.numero_commande,    
-        montant_total: command.montant_total, // 🔧 AJOUTÉ: Mapper le montant total
-        totalAmount: command.montant_total,   // 🔧 AJOUTÉ: Alias pour compatibilité
+        montant_total: command.montant_total,
+        totalAmount: command.montant_total,
         customer: {    
           id: command.customer_id._id,    
           name: command.customer_id?.physical_user_id?.first_name ||    
@@ -148,7 +148,8 @@ export const orderService = {
         } : null,    
         orderDate: command.date_commande,    
         requestedDeliveryDate: command.date_souhaite || command.date_commande,    
-        status: this.mapPlanificationToStatus(command.planification, command.livraison),    
+        // ✅ CORRIGÉ: Utiliser le statut de commande directement
+        status: this.mapCommandeToStatus(command.statut),    
         priority: command.planification?.priority || (command.urgent ? 'high' : 'medium'),    
         assignedTruckId: command.planification?.trucks_id?._id || null,    
         assignedTruck: command.planification?.trucks_id ? {    
@@ -207,7 +208,8 @@ export const orderService = {
         } : null,    
         orderDate: command.date_commande,    
         requestedDeliveryDate: command.date_souhaite || command.date_commande,    
-        status: this.mapPlanificationToStatus(planification),    
+        // ✅ CORRIGÉ: Utiliser le statut de commande directement
+        status: this.mapCommandeToStatus(command.statut),    
         priority: planification?.priority || (command.urgent ? 'high' : 'medium'),    
         products: response.data.data.lignes || [],    
         customerNotes: command.details || '',    
@@ -240,7 +242,8 @@ export const orderService = {
         pending: stats.pending || 0,    
         assigned: stats.assigned || 0,    
         inProgress: stats.inProgress || 0,    
-        delivered: stats.delivered || 0    
+        delivered: stats.delivered || 0,
+        cancelled: stats.cancelled || 0
       };    
     } catch (error) {    
       console.error('Erreur getOrderStats:', error);    
@@ -248,29 +251,20 @@ export const orderService = {
     }    
   },    
     
-  // Fonction pour mapper les planifications vers les statuts frontend
-  mapPlanificationToStatus(planification, livraison) {
-    if (livraison) {
-      switch (livraison.etat) {
-        case 'EN_COURS': return 'in_progress';
-        case 'LIVRE': return 'delivered';
-        case 'ANNULE': return 'cancelled';
-        case 'ECHEC': return 'cancelled';
-        case 'PARTIELLE': return 'delivered';
-        default: return 'in_progress';
-      }
+  // ✅ CORRIGÉ: Fonction pour mapper les statuts de commande vers les statuts frontend
+  mapCommandeToStatus(statutCommande) {
+    switch (statutCommande) {
+      case 'CONFIRMEE': return 'pending';
+      case 'ASSIGNEE': return 'assigned';
+      case 'EN_COURS': return 'in_progress';
+      case 'LIVREE': return 'delivered';
+      case 'ANNULEE': return 'cancelled';
+      case 'ECHOUEE': return 'cancelled';
+      default: return 'pending';
     }
-    
-    if (planification) {
-      switch (planification.etat) {
-        case 'PLANIFIE': return 'assigned';
-        case 'ANNULE': return 'cancelled';
-        default: return 'assigned';
-      }
-    }
-    
-    return 'pending';
   },
+
+  // ✅ SUPPRIMÉ: Ancienne fonction mapPlanificationToStatus remplacée par mapCommandeToStatus
 
   // Fonction pour assigner un camion
   async assignTruck(orderId, assignmentData) {
@@ -334,7 +328,7 @@ export const orderService = {
     }    
   },    
     
-  // Fonction pour générer l'historique d'une commande
+  // ✅ CORRIGÉ: Fonction pour générer l'historique basée sur les statuts de commande
   generateHistory(command, planification) {
     const history = [];
     
@@ -355,126 +349,178 @@ export const orderService = {
         status: 'assigned'
       });
     }
-    
-    return history.sort((a, b) => new Date(a.date) - new Date(b.date));
-  },
+
+    // ✅ NOUVEAU: Ajouter les étapes basées sur le statut de commande
+    if (command.statut === 'EN_COURS' && command.updatedAt) {
+      history.push({
+        id: 'in_progress',  
+        action: 'Livraison démarrée',  
+        date: command.updatedAt,  
+        status: 'in_progress'  
+      });  
+    }  
+  
+    if (command.statut === 'LIVREE' && command.updatedAt) {  
+      history.push({  
+        id: 'delivered',  
+        action: 'Livraison terminée',  
+        date: command.updatedAt,  
+        status: 'delivered'  
+      });  
+    }  
+  
+    if (command.statut === 'ANNULEE' && command.updatedAt) {  
+      history.push({  
+        id: 'cancelled',  
+        action: 'Commande annulée',  
+        date: command.updatedAt,  
+        status: 'cancelled'  
+      });  
+    }  
       
-  // Fonction pour créer une commande depuis les étapes du workflow client      
-  async createOrder(orderData) {      
-    try {      
-      const response = await api.post('/commands', orderData);      
-      return response.data;      
-    } catch (error) {      
-      console.error('Erreur création commande:', error);      
-      throw error;      
-    }      
-  },      
-      
-  // Fonction pour obtenir les commandes par statut
-  async getOrdersByStatus(status) {      
-    try {      
-      const response = await api.get('/commands', {      
-        params: { status }
-      });      
-      return response.data.data;      
-    } catch (error) {      
-      console.error('Erreur récupération commandes par statut:', error);      
-      throw error;      
-    }      
-  },      
-      
-  // Fonction pour obtenir les commandes urgentes      
-  async getUrgentOrders() {      
-    try {      
-      const response = await api.get('/commands', {      
-        params: { priority: 'urgent' }      
-      });      
-      return response.data.data;      
-    } catch (error) {      
-      console.error('Erreur récupération commandes urgentes:', error);        
-      throw error;        
-    }        
-  },        
+    return history.sort((a, b) => new Date(a.date) - new Date(b.date));  
+  },  
         
-  // Fonction pour marquer une commande comme urgente (via update)      
-  async markOrderAsUrgent(orderId) {        
+  // Fonction pour créer une commande depuis les étapes du workflow client        
+  async createOrder(orderData) {        
     try {        
-      const response = await api.put(`/commands/${orderId}`, {        
-        urgent: true        
-      });        
-      return response.data.data;        
+      const response = await api.post('/commands', orderData);        
+      return response.data;        
     } catch (error) {        
-      console.error('Erreur marquage commande urgente:', error);        
+      console.error('Erreur création commande:', error);        
       throw error;        
     }        
   },        
         
-  // Fonction pour obtenir les commandes d'une période        
-  async getOrdersByDateRange(startDate, endDate) {        
+  // Fonction pour obtenir les commandes par statut  
+  async getOrdersByStatus(status) {        
     try {        
       const response = await api.get('/commands', {        
-        params: {        
-          dateFrom: startDate,        
-          dateTo: endDate        
-        }        
+        params: { status }  
       });        
       return response.data.data;        
     } catch (error) {        
-      console.error('Erreur récupération commandes par période:', error);        
+      console.error('Erreur récupération commandes par statut:', error);        
       throw error;        
     }        
-  },    
-    
-  // ✅ NOUVEAU: Service pour les livraisons    
-  async startDelivery(planificationId, deliveryData) {    
-    try {    
-      const response = await api.post(`/livraisons/start/${planificationId}`, deliveryData);    
-      return response.data.data;    
-    } catch (error) {    
-      console.error('Erreur démarrage livraison:', error);    
-      throw error;    
-    }    
-  },    
-    
-  async completeDelivery(livraisonId, completionData) {    
-    try {    
-      const response = await api.put(`/livraisons/${livraisonId}/complete`, completionData);    
-      return response.data.data;    
-    } catch (error) {    
-      console.error('Erreur finalisation livraison:', error);    
-      throw error;    
-    }    
-  },    
-    
-  async getDeliveries(params = {}) {    
-    try {    
-      const response = await api.get('/livraisons', { params });    
-      return response.data;    
-    } catch (error) {    
-      console.error('Erreur récupération livraisons:', error);    
-      throw error;    
-    }    
-  },    
-    
-  async getDeliveryById(livraisonId) {    
-    try {    
-      const response = await api.get(`/livraisons/${livraisonId}`);    
-      return response.data.data;    
-    } catch (error) {    
-      console.error('Erreur récupération livraison:', error);    
-      throw error;    
-    }    
-  },    
-    
-  async updateDeliveryLines(livraisonId, lignes) {    
-    try {    
-      const response = await api.put(`/livraisons/${livraisonId}/lines`, { lignes });    
-      return response.data.data;    
-    } catch (error) {    
-      console.error('Erreur mise à jour lignes livraison:', error);    
-      throw error;    
-    }    
-  }    
-};        
+  },        
         
+  // Fonction pour obtenir les commandes urgentes        
+  async getUrgentOrders() {        
+    try {        
+      const response = await api.get('/commands', {        
+        params: { priority: 'urgent' }        
+      });        
+      return response.data.data;        
+    } catch (error) {        
+      console.error('Erreur récupération commandes urgentes:', error);          
+      throw error;          
+    }          
+  },          
+          
+  // Fonction pour marquer une commande comme urgente (via update)        
+  async markOrderAsUrgent(orderId) {          
+    try {          
+      const response = await api.put(`/commands/${orderId}`, {          
+        urgent: true          
+      });          
+      return response.data.data;          
+    } catch (error) {          
+      console.error('Erreur marquage commande urgente:', error);          
+      throw error;          
+    }          
+  },          
+          
+  // Fonction pour obtenir les commandes d'une période          
+  async getOrdersByDateRange(startDate, endDate) {          
+    try {          
+      const response = await api.get('/commands', {          
+        params: {          
+          dateFrom: startDate,          
+          dateTo: endDate          
+        }          
+      });          
+      return response.data.data;          
+    } catch (error) {          
+      console.error('Erreur récupération commandes par période:', error);          
+      throw error;          
+    }          
+  },      
+      
+  // ✅ NOUVEAU: Service pour les livraisons      
+  async startDelivery(planificationId, deliveryData) {      
+    try {      
+      const response = await api.post(`/livraisons/start/${planificationId}`, deliveryData);      
+      return response.data.data;      
+    } catch (error) {      
+      console.error('Erreur démarrage livraison:', error);      
+      throw error;      
+    }      
+  },      
+      
+  async completeDelivery(livraisonId, completionData) {      
+    try {      
+      const response = await api.put(`/livraisons/${livraisonId}/complete`, completionData);      
+      return response.data.data;      
+    } catch (error) {      
+      console.error('Erreur finalisation livraison:', error);      
+      throw error;      
+    }      
+  },      
+      
+  async getDeliveries(params = {}) {      
+    try {      
+      const response = await api.get('/livraisons', { params });      
+      return response.data;      
+    } catch (error) {      
+      console.error('Erreur récupération livraisons:', error);      
+      throw error;      
+    }      
+  },      
+      
+  async getDeliveryById(livraisonId) {      
+    try {      
+      const response = await api.get(`/livraisons/${livraisonId}`);      
+      return response.data.data;      
+    } catch (error) {      
+      console.error('Erreur récupération livraison:', error);      
+      throw error;      
+    }      
+  },      
+      
+  async updateDeliveryLines(livraisonId, lignes) {      
+    try {      
+      const response = await api.put(`/livraisons/${livraisonId}/lines`, { lignes });      
+      return response.data.data;      
+    } catch (error) {      
+      console.error('Erreur mise à jour lignes livraison:', error);      
+      throw error;      
+    }      
+  },  
+  
+  // ✅ NOUVEAU: Fonction pour annuler une livraison  
+  async cancelDelivery(livraisonId, raison_annulation = '') {  
+    try {  
+      const response = await api.put(`/livraisons/${livraisonId}/cancel`, {  
+        raison_annulation  
+      });  
+      return response.data.data;  
+    } catch (error) {  
+      console.error('Erreur annulation livraison:', error);  
+      throw error;  
+    }  
+  },  
+  
+  // ✅ NOUVEAU: Fonction pour obtenir les statistiques des livraisons  
+  async getDeliveryStats() {  
+    try {  
+      const response = await api.get('/livraisons/stats');  
+      return response.data.data;  
+    } catch (error) {  
+      console.error('Erreur récupération statistiques livraisons:', error);  
+      throw error;  
+    }  
+  }  
+};          
+          
 export default orderService;

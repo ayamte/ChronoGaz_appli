@@ -1,24 +1,24 @@
-const express = require('express');  
-const { 
-  getPlanifications, 
-  getPlanificationById,
-  createPlanification,
-  deletePlanificationByCommande
-} = require('../controllers/planificationController');  
-const { authenticateToken } = require('../middleware/authMiddleware');  
+const express = require('express');    
+const {   
+  getPlanifications,   
+  getPlanificationById,  
+  createPlanification,  
+  cancelPlanificationByCommande  // ✅ CORRIGÉ: Utiliser le bon nom  
+} = require('../controllers/planificationController');    
+const { authenticateToken } = require('../middleware/authMiddleware');    
+    
+const router = express.Router();    
+    
+// GET /api/planifications    
+router.get('/', authenticateToken, getPlanifications);    
+    
+// GET /api/planifications/:id    
+router.get('/:id', authenticateToken, getPlanificationById);  
   
-const router = express.Router();  
+// ✅ NOUVEAU: POST /api/planifications - Créer une planification (assigner un camion)  
+router.post('/', authenticateToken, createPlanification);  
   
-// GET /api/planifications  
-router.get('/', authenticateToken, getPlanifications);  
-  
-// GET /api/planifications/:id  
-router.get('/:id', authenticateToken, getPlanificationById);
-
-// ✅ NOUVEAU: POST /api/planifications - Créer une planification (assigner un camion)
-router.post('/', authenticateToken, createPlanification);
-
-// ✅ NOUVEAU: DELETE /api/planifications/commande/:commandeId - Supprimer une planification par commande
-router.delete('/commande/:commandeId', authenticateToken, deletePlanificationByCommande);
-  
+// ✅ CORRIGÉ: Utiliser le bon nom de fonction  
+router.delete('/commande/:commandeId', authenticateToken, cancelPlanificationByCommande);  
+    
 module.exports = router;

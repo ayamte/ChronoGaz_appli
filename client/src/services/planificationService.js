@@ -39,8 +39,6 @@ const planificationService = {
         pagination: response.data.pagination
       });
     
-      // CORRIGÉ : Retourner les données brutes de l'API sans transformation excessive  
-      // pour correspondre à la structure JSON réelle  
       return {    
         data: response.data.data || [],    
         total: response.data.count || 0,    
@@ -52,7 +50,7 @@ const planificationService = {
     }    
   },    
     
-  // Méthodes utilitaires pour extraire les noms clients    
+  // Méthodes utilitaires pour extraire les noms clients (reste identique)
   getClientName(customer) {    
     if (!customer) return 'Client inconnu';    
         
@@ -74,7 +72,7 @@ const planificationService = {
            customer.moral_user_id?.telephone_principal || '';    
   },    
     
-  // Obtenir une planification par ID    
+  // Obtenir une planification par ID (reste identique)
   async getPlanificationById(planificationId) {    
     try {    
       const response = await api.get(`/planifications/${planificationId}`);    
@@ -102,12 +100,11 @@ const planificationService = {
     }    
   },    
     
-  // Obtenir les planifications par employé    
+  // Obtenir les planifications par employé (reste identique)
   async getPlanificationsByEmployee(employeeId) {    
     try {    
       console.log('🔍 [DEBUG] Récupération planifications pour employé:', employeeId);
       
-      // 1. D'abord, essayer de récupérer les planifications où l'employé est assigné comme chauffeur
       let planifications = await this.getPlanifications({     
         livreur_employee_id: employeeId,    
         etat: 'PLANIFIE'    
@@ -115,8 +112,6 @@ const planificationService = {
       
       console.log('👤 [DEBUG] Planifications avec chauffeur assigné:', planifications.data.length);
       
-      // 2. Si aucune planification trouvée, essayer de récupérer par camion
-      // Il faut d'abord récupérer l'employé pour connaître son camion assigné
       if (planifications.data.length === 0) {
         try {
           console.log('🚛 [DEBUG] Aucune planification directe, tentative par camion...');
@@ -135,7 +130,6 @@ const planificationService = {
               const truckId = userData.data.employee_info.truck_id;
               console.log('🚛 [DEBUG] Employé assigné au camion:', truckId);
               
-              // Récupérer les planifications pour ce camion
               const truckPlanifications = await this.getPlanifications({     
                 trucks_id: truckId,    
                 etat: 'PLANIFIE'    
@@ -152,7 +146,6 @@ const planificationService = {
         }
       }
       
-      // 3. Si toujours rien, essayer de récupérer toutes les planifications PLANIFIE (pour debug)
       if (planifications.data.length === 0) {
         console.log('🔍 [DEBUG] Aucune planification trouvée, tentative de récupération générale...');
         try {
@@ -167,7 +160,6 @@ const planificationService = {
               chauffeur: allPlanifications.data[0].livreur_employee_id
             });
             
-            // ✅ CORRECTION: Retourner les planifications trouvées !
             console.log('✅ [DEBUG] Retour des planifications générales trouvées');
             planifications = allPlanifications;
           }
@@ -183,7 +175,7 @@ const planificationService = {
     }    
   },    
     
-  // Obtenir les planifications d'aujourd'hui    
+  // Obtenir les planifications d'aujourd'hui (reste identique)
   async getTodayPlanifications() {    
     try {    
       const today = new Date();    
@@ -197,7 +189,7 @@ const planificationService = {
     }    
   },    
     
-  // Obtenir les planifications par camion    
+  // Obtenir les planifications par camion (reste identique)
   async getPlanificationsByTruck(truckId) {    
     try {    
       return await this.getPlanifications({     
@@ -210,7 +202,18 @@ const planificationService = {
     }    
   },    
     
-  // Mettre à jour une planification    
+  // ✅ NOUVEAU: Créer une planification
+  async createPlanification(planificationData) {
+    try {
+      const response = await api.post('/planifications', planificationData);
+      return response.data.data;
+    } catch (error) {
+      console.error('Erreur création planification:', error);
+      throw error;
+    }
+  },
+    
+  // Mettre à jour une planification (reste identique)
   async updatePlanification(planificationId, updateData) {    
     try {    
       const response = await api.put(`/planifications/${planificationId}`, updateData);    
@@ -221,10 +224,12 @@ const planificationService = {
     }    
   },    
     
-  // Annuler une planification    
-  async cancelPlanification(planificationId) {    
+  // ✅ CORRIGÉ: Annuler une planification (utilise l'endpoint correct)
+  async cancelPlanification(commandeId, raison_annulation = '') {    
     try {    
-      const response = await api.delete(`/planifications/${planificationId}`);    
+      const response = await api.put(`/planifications/commande/${commandeId}/cancel`, {
+        raison_annulation
+      });    
       return response.data;    
     } catch (error) {    
       console.error('Erreur annulation planification:', error);    
@@ -232,7 +237,7 @@ const planificationService = {
     }    
   },    
     
-  // Démarrer une livraison depuis une planification    
+  // Démarrer une livraison depuis une planification (reste identique)
   async startLivraisonFromPlanification(planificationId, deliveryData = {}) {    
     try {    
       const { latitude, longitude, details } = deliveryData;    
@@ -250,7 +255,7 @@ const planificationService = {
     }    
   },    
     
-  // Obtenir les statistiques des planifications    
+  // Obtenir les statistiques des planifications (reste identique)
   async getPlanificationStats(params = {}) {    
     try {    
       const response = await api.get('/planifications/stats', { params });    
@@ -261,43 +266,34 @@ const planificationService = {
     }    
   },    
     
-  // Mapper les états de planification pour l'affichage    
+  // ✅ CORRIGÉ: Mapper les états de planification simplifiés
   mapEtatToDisplay(etat) {    
     const mapping = {    
       'PLANIFIE': 'Planifiée',    
-      'EN_COURS': 'En cours',    
-      'LIVRE': 'Livrée',    
-      'ANNULE': 'Annulée',    
-      'REPORTE': 'Reportée'    
+      'ANNULE': 'Annulée'
     };    
     return mapping[etat] || etat;    
   },    
     
-  // Obtenir la couleur pour l'état    
+  // ✅ CORRIGÉ: Couleurs pour les états simplifiés
   getEtatColor(etat) {    
     const colors = {    
       'PLANIFIE': 'blue',    
-      'EN_COURS': 'orange',    
-      'LIVRE': 'green',    
-      'ANNULE': 'red',    
-      'REPORTE': 'yellow'    
+      'ANNULE': 'red'
     };    
     return colors[etat] || 'gray';    
   },    
     
-  // Obtenir l'icône pour l'état    
+  // ✅ CORRIGÉ: Icônes pour les états simplifiés
   getEtatIcon(etat) {    
     const icons = {    
       'PLANIFIE': 'calendar',    
-      'EN_COURS': 'truck',    
-      'LIVRE': 'check-circle',    
-      'ANNULE': 'x-circle',    
-      'REPORTE': 'clock'    
+      'ANNULE': 'x-circle'
     };    
     return icons[etat] || 'circle';    
   },    
     
-  // Valider les données de planification    
+  // ✅ CORRIGÉ: Validation avec états simplifiés
   validatePlanificationData(data) {    
     const errors = [];    
     
@@ -311,10 +307,6 @@ const planificationService = {
     
     if (!data.delivery_date) {    
       errors.push('Date de livraison requise');    
-    }    
-    
-    if (!data.livreur_employee_id) {    
-      errors.push('ID du livreur requis');    
     }    
     
     // Validation de la date    
@@ -331,7 +323,12 @@ const planificationService = {
     // Validation de la priorité    
     if (data.priority && !['low', 'medium', 'high', 'urgent'].includes(data.priority)) {    
       errors.push('Priorité invalide');    
-    }    
+    }
+
+    // ✅ NOUVEAU: Validation de l'état
+    if (data.etat && !['PLANIFIE', 'ANNULE'].includes(data.etat)) {
+      errors.push('État invalide. États autorisés: PLANIFIE, ANNULE');
+    }
     
     return {    
       isValid: errors.length === 0,    
@@ -339,12 +336,16 @@ const planificationService = {
     };    
   },    
     
-  // Filtrer les planifications par critères    
+  // ✅ CORRIGÉ: Filtrage avec états simplifiés
   filterPlanifications(planifications, filters = {}) {    
     let filtered = [...planifications];    
     
     if (filters.etat) {    
-      filtered = filtered.filter(p => p.etat === filters.etat);    
+      // ✅ NOUVEAU: Validation de l'état de filtre
+      const etatsAutorises = ['PLANIFIE', 'ANNULE'];
+      if (etatsAutorises.includes(filters.etat)) {
+        filtered = filtered.filter(p => p.etat === filters.etat);    
+      }
     }    
     
     if (filters.priority) {    
@@ -365,47 +366,47 @@ const planificationService = {
       const searchTerm = filters.search.toLowerCase();    
       filtered = filtered.filter(p =>     
         p.commande?.numero?.toLowerCase().includes(searchTerm) ||    
-        p.commande?.client_name?.toLowerCase().includes(searchTerm) ||    
-        p.livreur?.nom?.toLowerCase().includes(searchTerm)    
-      );    
-    }    
-    
-    return filtered;    
-  },    
-    
-  // Trier les planifications    
-  sortPlanifications(planifications, sortBy = 'date', sortOrder = 'asc') {    
-    return [...planifications].sort((a, b) => {    
-      let aValue, bValue;    
-    
-      switch (sortBy) {    
-        case 'date':    
-          aValue = new Date(a.date);    
-          bValue = new Date(b.date);    
-          break;    
-        case 'priority':    
-          const priorityOrder = { low: 1, medium: 2, high: 3, urgent: 4 };    
-          aValue = priorityOrder[a.priority] || 0;    
-          bValue = priorityOrder[b.priority] || 0;    
-          break;    
-        case 'client':    
-          aValue = a.commande?.client_name || '';    
-          bValue = b.commande?.client_name || '';    
-          break;    
-        case 'etat':    
-          aValue = a.etat || '';    
-          bValue = b.etat || '';    
-          break;    
-        default:    
-          aValue = a[sortBy] || '';    
-          bValue = b[sortBy] || '';    
-      }    
-    
-      if (aValue < bValue) return sortOrder === 'asc' ? -1 : 1;    
-      if (aValue > bValue) return sortOrder === 'asc' ? 1 : -1;    
-      return 0;    
-    });    
-  }    
-};    
-    
+        p.commande?.client_name?.toLowerCase().includes(searchTerm) ||      
+        p.livreur?.nom?.toLowerCase().includes(searchTerm)      
+      );      
+    }      
+      
+    return filtered;      
+  },      
+      
+  // ✅ CORRIGÉ: Tri avec validation des états simplifiés  
+  sortPlanifications(planifications, sortBy = 'date', sortOrder = 'asc') {      
+    return [...planifications].sort((a, b) => {      
+      let aValue, bValue;      
+      
+      switch (sortBy) {      
+        case 'date':      
+          aValue = new Date(a.date);      
+          bValue = new Date(b.date);      
+          break;      
+        case 'priority':      
+          const priorityOrder = { low: 1, medium: 2, high: 3, urgent: 4 };      
+          aValue = priorityOrder[a.priority] || 0;      
+          bValue = priorityOrder[b.priority] || 0;      
+          break;      
+        case 'client':      
+          aValue = a.commande?.client_name || '';      
+          bValue = b.commande?.client_name || '';      
+          break;      
+        case 'etat':      
+          aValue = a.etat || '';      
+          bValue = b.etat || '';      
+          break;      
+        default:      
+          aValue = a[sortBy] || '';      
+          bValue = b[sortBy] || '';      
+      }      
+      
+      if (aValue < bValue) return sortOrder === 'asc' ? -1 : 1;      
+      if (aValue > bValue) return sortOrder === 'asc' ? 1 : -1;      
+      return 0;      
+    });      
+  }      
+};      
+      
 export default planificationService;

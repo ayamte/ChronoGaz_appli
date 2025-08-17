@@ -5,7 +5,7 @@ const Command = require('../models/Commande');
 const CommandeLine = require('../models/CommandeLine');    
 const mongoose = require('mongoose');    
     
-// Démarrer une livraison depuis une planification    
+// ✅ CORRIGÉ: Démarrer une livraison depuis une planification    
 const startLivraison = async (req, res) => {    
   try {    
     const { planificationId } = req.params;    
@@ -25,6 +25,14 @@ const startLivraison = async (req, res) => {
       });    
     }    
     
+    // ✅ NOUVEAU: Vérifier l'état de la planification
+    if (planification.etat !== 'PLANIFIE') {
+      return res.status(400).json({
+        success: false,
+        message: `Impossible de démarrer une livraison pour une planification "${planification.etat}"`
+      });
+    }
+    
     console.log('📋 [DEBUG] Planification trouvée:', {
       id: planification._id,
       etat: planification.etat,
@@ -41,7 +49,7 @@ const startLivraison = async (req, res) => {
       });    
     }    
     
-    // ✅ CORRECTION: Récupérer le chauffeur du camion si pas assigné à la planification
+    // Récupérer le chauffeur du camion si pas assigné à la planification
     let livreurId = planification.livreur_employee_id?._id;
     if (!livreurId && planification.trucks_id?.driver) {
       livreurId = planification.trucks_id.driver;
@@ -74,11 +82,7 @@ const startLivraison = async (req, res) => {
     
     await nouvelleLivraison.save();    
     console.log('✅ [DEBUG] Livraison créée avec ID:', nouvelleLivraison._id);
-    
-    // Mettre à jour l'état de la planification    
-    planification.etat = 'EN_COURS';    
-    await planification.save();    
-    console.log('✅ [DEBUG] Planification mise à jour: EN_COURS');
+    // La synchronisation avec la commande se fait automatiquement via le middleware
     
     // Copier les lignes de commande vers les lignes de livraison    
     const lignesCommande = await CommandeLine.find({     
@@ -112,7 +116,7 @@ const startLivraison = async (req, res) => {
   }    
 };    
     
-// Terminer une livraison    
+// ✅ CORRIGÉ: Terminer une livraison avec validation des états
 const completeLivraison = async (req, res) => {    
   try {    
     const { id } = req.params;    
@@ -145,16 +149,28 @@ const completeLivraison = async (req, res) => {
       });    
     }    
     
+    // ✅ NOUVEAU: Vérifier l'état actuel de la livraison
     if (livraison.etat !== 'EN_COURS') {    
       return res.status(400).json({    
         success: false,    
-        message: 'La livraison doit être en cours pour être terminée'    
+        message: `Impossible de terminer une livraison avec l'état "${livraison.etat}"`    
       });    
     }    
+
+    // ✅ NOUVEAU: Valider les nouveaux états autorisés
+    const etatsAutorises = ['LIVRE', 'ECHEC', 'ANNULE'];
+    const nouvelEtat = etat || 'LIVRE';
+    
+    if (!etatsAutorises.includes(nouvelEtat)) {
+      return res.status(400).json({
+        success: false,
+        message: `État "${nouvelEtat}" non autorisé. États valides: ${etatsAutorises.join(', ')}`
+      });
+    }
     
     // Mettre à jour la livraison    
     const updateData = {    
-      etat: etat || 'LIVRE',    
+      etat: nouvelEtat,    
       latitude: latitude || livraison.latitude,    
       longitude: longitude || livraison.longitude,    
       details: details || livraison.details,    
@@ -170,17 +186,19 @@ const completeLivraison = async (req, res) => {
       updateData,     
       { new: true }    
     );    
-    
-    // Mettre à jour l'état de la planification    
-    const planification = await Planification.findById(livraison.planification_id._id);    
-    if (planification) {    
-      planification.etat = etat || 'LIVRE';    
-      await planification.save();    
-    }    
+    // La synchronisation avec la commande se fait automatiquement via le middleware
+
+    // ✅ NOUVEAU: Mettre à jour l'état de la planification (optionnel)
+    const planification = await Planification.findById(livraison.planification_id._id);
+    if (planification && nouvelEtat === 'ANNULE') {
+      planification.etat = 'ANNULE';
+      planification.raison_annulation = details || 'Livraison annulée';
+      await planification.save();
+    }
     
     res.status(200).json({    
       success: true,    
-      message: 'Livraison terminée avec succès',    
+      message: `Livraison ${nouvelEtat.toLowerCase()} avec succès`,    
       data: livraisonMiseAJour    
     });    
     
@@ -193,16 +211,29 @@ const completeLivraison = async (req, res) => {
   }    
 };    
     
-// Obtenir toutes les livraisons    
+// ✅ CORRIGÉ: Obtenir toutes les livraisons avec validation des états
 const getLivraisons = async (req, res) => {    
   try {    
     const { page = 1, limit = 20, etat, planificationId, livreur_employee_id } = req.query;    
     const skip = (parseInt(page) - 1) * parseInt(limit);    
         
     const filter = {};    
+    
+    // ✅ NOUVEAU: Validation des états autorisés
     if (etat && etat !== 'all') {      
-      filter.etat = etat.toUpperCase();      
+      const etatsAutorises = ['EN_COURS', 'LIVRE', 'ANNULE', 'ECHEC'];
+      const etatUpper = etat.toUpperCase();
+      
+      if (etatsAutorises.includes(etatUpper)) {
+        filter.etat = etatUpper;
+      } else {
+        return res.status(400).json({
+          success: false,
+          message: `État "${etat}" non autorisé. États valides: ${etatsAutorises.join(', ')}`
+        });
+      }
     }      
+    
     if (planificationId) {      
       filter.planification_id = planificationId;      
     }    
@@ -216,7 +247,7 @@ const getLivraisons = async (req, res) => {
         populate: [    
           {    
             path: 'commande_id',    
-            select: 'numero_commande date_commande montant_total details',    
+            select: 'numero_commande date_commande montant_total details statut',    
             populate: [    
               {    
                 path: 'customer_id',    
@@ -290,7 +321,7 @@ const getLivraisons = async (req, res) => {
   }    
 };    
     
-// Obtenir une livraison par ID    
+// Obtenir une livraison par ID (reste identique)
 const getLivraisonById = async (req, res) => {    
   try {    
     const { id } = req.params;    
@@ -305,120 +336,285 @@ const getLivraisonById = async (req, res) => {
     const livraison = await Livraison.findById(id)    
       .populate({    
         path: 'planification_id',    
-        populate: [    
-          {    
-            path: 'commande_id',    
-            populate: {    
-              path: 'customer_id',    
-              select: 'customer_code type_client'    
-            }    
-          },    
-          {    
-            path: 'trucks_id',    
-            select: 'matricule marque capacite'    
-          },    
-          {    
-            path: 'livreur_employee_id',    
-            select: 'matricule fonction physical_user_id',    
-            populate: {    
-              path: 'physical_user_id',    
-              select: 'first_name last_name telephone_principal'    
-            }    
-          }    
-        ]    
-      });    
-    
-    if (!livraison) {    
-      return res.status(404).json({    
-        success: false,    
-        message: 'Livraison non trouvée'    
-      });    
-    }    
-    
-    // Récupérer les lignes de livraison    
-    const lignesLivraison = await LivraisonLine.find({ livraison_id: id })    
-      .populate('product_id', 'ref long_name short_name brand')    
-      .populate('UM_id', 'unitemesure');    
-    
-    res.status(200).json({    
-      success: true,    
-      data: {    
-        livraison,    
-        lignes: lignesLivraison    
-      }    
-    });    
-    
-  } catch (error) {    
-    console.error('Erreur lors de la récupération de la livraison:', error);    
-    res.status(500).json({    
-      success: false,    
-      message: error.message    
-    });    
-  }    
-};    
-    
-// Mettre à jour les lignes de livraison    
-const updateLivraisonLines = async (req, res) => {    
-  try {    
-    const { id } = req.params;    
-    const { lignes } = req.body;    
-    
-    if (!mongoose.Types.ObjectId.isValid(id)) {    
-      return res.status(400).json({    
-        success: false,    
-        message: 'ID de livraison invalide'    
-      });    
-    }    
-    
-    const livraison = await Livraison.findById(id);    
-    if (!livraison) {    
-      return res.status(404).json({    
-        success: false,    
-        message: 'Livraison non trouvée'    
-      });    
-    }    
-    
-    // Supprimer les anciennes lignes    
-    await LivraisonLine.deleteMany({ livraison_id: id });    
-    
-    // Créer les nouvelles lignes    
-    const nouvellesLignes = lignes.map(ligne => ({    
-      livraison_id: id,    
-      quantity: ligne.quantity,    
-      price: ligne.price,    
-      product_id: ligne.product_id,    
-      UM_id: ligne.UM_id,    
-      total_ligne: ligne.quantity * ligne.price,    
-      etat_ligne: ligne.etat_ligne || 'LIVRE'    
-    }));    
-    
-    await LivraisonLine.insertMany(nouvellesLignes);    
-    
-    // Recalculer le total de la livraison    
-    const nouveauTotal = nouvellesLignes.reduce((total, ligne) => total + ligne.total_ligne, 0);    
-    livraison.total = nouveauTotal;    
-    livraison.total_ttc = nouveauTotal;    
-    await livraison.save();    
-    
-    res.status(200).json({    
-      success: true,    
-      message: 'Lignes de livraison mises à jour avec succès',    
-      data: { livraison, lignes: nouvellesLignes }    
-    });    
-    
-  } catch (error) {    
-    console.error('Erreur lors de la mise à jour des lignes:', error);    
-    res.status(500).json({    
-      success: false,    
-      message: error.message    
-    });    
-  }    
-};    
-    
-module.exports = {    
-  startLivraison,    
-  completeLivraison,    
-  getLivraisons,    
-  getLivraisonById,    
-  updateLivraisonLines    
+              populate: [      
+          {      
+            path: 'commande_id',      
+            populate: {      
+              path: 'customer_id',      
+              select: 'customer_code type_client'      
+            }      
+          },      
+          {      
+            path: 'trucks_id',      
+            select: 'matricule marque capacite'      
+          },      
+          {      
+            path: 'livreur_employee_id',      
+            select: 'matricule fonction physical_user_id',      
+            populate: {      
+              path: 'physical_user_id',      
+              select: 'first_name last_name telephone_principal'      
+            }      
+          }      
+        ]      
+      });      
+      
+    if (!livraison) {      
+      return res.status(404).json({      
+        success: false,      
+        message: 'Livraison non trouvée'      
+      });      
+    }      
+      
+    // Récupérer les lignes de livraison      
+    const lignesLivraison = await LivraisonLine.find({ livraison_id: id })      
+      .populate('product_id', 'ref long_name short_name brand')      
+      .populate('UM_id', 'unitemesure');      
+      
+    res.status(200).json({      
+      success: true,      
+      data: {      
+        livraison,      
+        lignes: lignesLivraison      
+      }      
+    });      
+      
+  } catch (error) {      
+    console.error('Erreur lors de la récupération de la livraison:', error);      
+    res.status(500).json({      
+      success: false,      
+      message: error.message      
+    });      
+  }      
+};      
+      
+// ✅ CORRIGÉ: Mettre à jour les lignes de livraison avec validation  
+const updateLivraisonLines = async (req, res) => {      
+  try {      
+    const { id } = req.params;      
+    const { lignes } = req.body;      
+      
+    if (!mongoose.Types.ObjectId.isValid(id)) {      
+      return res.status(400).json({      
+        success: false,      
+        message: 'ID de livraison invalide'      
+      });      
+    }      
+      
+    const livraison = await Livraison.findById(id);      
+    if (!livraison) {      
+      return res.status(404).json({      
+        success: false,      
+        message: 'Livraison non trouvée'      
+      });      
+    }      
+  
+    // ✅ NOUVEAU: Vérifier que la livraison peut être modifiée  
+    if (livraison.etat !== 'EN_COURS') {  
+      return res.status(400).json({  
+        success: false,  
+        message: `Impossible de modifier les lignes d'une livraison avec l'état "${livraison.etat}"`  
+      });  
+    }  
+      
+    // Supprimer les anciennes lignes      
+    await LivraisonLine.deleteMany({ livraison_id: id });      
+      
+    // ✅ NOUVEAU: Validation des états de ligne autorisés  
+    const etatsLigneAutorises = ['LIVRE', 'ECHEC', 'ANNULE'];  
+      
+    // Créer les nouvelles lignes avec validation  
+    const nouvellesLignes = lignes.map(ligne => {  
+      const etatLigne = ligne.etat_ligne || 'LIVRE';  
+        
+      if (!etatsLigneAutorises.includes(etatLigne)) {  
+        throw new Error(`État de ligne "${etatLigne}" non autorisé. États valides: ${etatsLigneAutorises.join(', ')}`);  
+      }  
+        
+      return {  
+        livraison_id: id,      
+        quantity: ligne.quantity,      
+        price: ligne.price,      
+        product_id: ligne.product_id,      
+        UM_id: ligne.UM_id,      
+        total_ligne: ligne.quantity * ligne.price,      
+        etat_ligne: etatLigne  
+      };  
+    });      
+      
+    await LivraisonLine.insertMany(nouvellesLignes);      
+      
+    // Recalculer le total de la livraison      
+    const nouveauTotal = nouvellesLignes.reduce((total, ligne) => total + ligne.total_ligne, 0);      
+    livraison.total = nouveauTotal;      
+    livraison.total_ttc = nouveauTotal;      
+    await livraison.save();      
+      
+    res.status(200).json({      
+      success: true,      
+      message: 'Lignes de livraison mises à jour avec succès',      
+      data: { livraison, lignes: nouvellesLignes }      
+    });      
+      
+  } catch (error) {      
+    console.error('Erreur lors de la mise à jour des lignes:', error);      
+    res.status(500).json({      
+      success: false,      
+      message: error.message      
+    });      
+  }      
+};      
+  
+// ✅ NOUVEAU: Fonction pour obtenir les statistiques des livraisons  
+const getLivraisonsStats = async (req, res) => {  
+  try {  
+    // Statistiques par état  
+    const etatStats = await Livraison.aggregate([  
+      {  
+        $group: {  
+          _id: '$etat',  
+          count: { $sum: 1 }  
+        }  
+      }  
+    ]);  
+  
+    // Livraisons d'aujourd'hui  
+    const today = new Date();  
+    today.setHours(0, 0, 0, 0);  
+    const tomorrow = new Date(today);  
+    tomorrow.setDate(tomorrow.getDate() + 1);  
+  
+    const livraisonsAujourdhui = await Livraison.countDocuments({  
+      date: {  
+        $gte: today,  
+        $lt: tomorrow  
+      }  
+    });  
+  
+    // Livraisons en cours  
+    const livraisonsEnCours = await Livraison.countDocuments({  
+      etat: 'EN_COURS'  
+    });  
+  
+    // Total des livraisons  
+    const totalLivraisons = await Livraison.countDocuments();  
+  
+    // Statistiques par chauffeur (top 5)  
+    const chauffeurStats = await Livraison.aggregate([  
+      {  
+        $group: {  
+          _id: '$livreur_employee_id',  
+          count: { $sum: 1 },  
+          livrees: {  
+            $sum: {  
+              $cond: [{ $eq: ['$etat', 'LIVRE'] }, 1, 0]  
+            }  
+          }  
+        }  
+      },  
+      {  
+        $sort: { count: -1 }  
+      },  
+      {  
+        $limit: 5  
+      },  
+      {  
+        $lookup: {  
+          from: 'employes',  
+          localField: '_id',  
+          foreignField: '_id',  
+          as: 'chauffeur'  
+        }  
+      }  
+    ]);  
+  
+    res.status(200).json({  
+      success: true,  
+      data: {  
+        totalLivraisons,  
+        livraisonsAujourdhui,  
+        livraisonsEnCours,  
+        repartitionParEtat: etatStats,  
+        topChauffeurs: chauffeurStats  
+      }  
+    });  
+  
+  } catch (error) {  
+    console.error('❌ Erreur récupération statistiques livraisons:', error);  
+    res.status(500).json({  
+      success: false,  
+      message: error.message  
+    });  
+  }  
+};  
+  
+// ✅ NOUVEAU: Fonction pour annuler une livraison  
+const cancelLivraison = async (req, res) => {  
+  try {  
+    const { id } = req.params;  
+    const { raison_annulation } = req.body;  
+  
+    if (!mongoose.Types.ObjectId.isValid(id)) {  
+      return res.status(400).json({  
+        success: false,  
+        message: 'ID de livraison invalide'  
+      });  
+    }  
+  
+    const livraison = await Livraison.findById(id)  
+      .populate('planification_id');  
+  
+    if (!livraison) {  
+      return res.status(404).json({  
+        success: false,  
+        message: 'Livraison non trouvée'  
+      });  
+    }  
+  
+    // ✅ NOUVEAU: Vérifier que la livraison peut être annulée  
+    if (livraison.etat !== 'EN_COURS') {  
+      return res.status(400).json({  
+        success: false,  
+        message: `Impossible d'annuler une livraison avec l'état "${livraison.etat}"`  
+      });  
+    }  
+  
+    // Mettre à jour la livraison  
+    livraison.etat = 'ANNULE';  
+    livraison.details = `${livraison.details || ''}\nRaison d'annulation: ${raison_annulation || 'Livraison annulée'}`;  
+    await livraison.save();  
+    // La synchronisation avec la commande se fait automatiquement via le middleware  
+  
+    // Mettre à jour la planification si nécessaire  
+    const planification = await Planification.findById(livraison.planification_id._id);  
+    if (planification && planification.etat === 'PLANIFIE') {  
+      planification.etat = 'ANNULE';  
+      planification.raison_annulation = raison_annulation || 'Livraison annulée';  
+      await planification.save();  
+    }  
+  
+    res.status(200).json({  
+      success: true,  
+      message: 'Livraison annulée avec succès',  
+      data: livraison  
+    });  
+  
+  } catch (error) {  
+    console.error('❌ Erreur annulation livraison:', error);  
+    res.status(500).json({  
+      success: false,  
+      message: error.message  
+    });  
+  }  
+};  
+      
+module.exports = {      
+  startLivraison,      
+  completeLivraison,      
+  getLivraisons,      
+  getLivraisonById,      
+  updateLivraisonLines,  
+  getLivraisonsStats,  
+  cancelLivraison  
 };
+

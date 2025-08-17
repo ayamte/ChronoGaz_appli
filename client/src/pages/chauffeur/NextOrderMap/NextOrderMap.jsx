@@ -28,7 +28,7 @@ export default function NextOrderMapPage() {
   const [selectedOrder, setSelectedOrder] = useState(null)
   const [isDetailsModalOpen, setIsDetailsModalOpen] = useState(false)
   const [isStatusModalOpen, setIsStatusModalOpen] = useState(false)
-  const [statusAction, setStatusAction] = useState('') // 'LIVRE', 'ECHEC', 'PARTIELLE', 'ANNULE'
+  const [statusAction, setStatusAction] = useState('')
   const [statusNote, setStatusNote] = useState('')
   const [loading, setLoading] = useState(false)
   const [notification, setNotification] = useState(null)
@@ -54,16 +54,12 @@ export default function NextOrderMapPage() {
           return
         }
         
-        console.log('✅ Token trouvé:', token.substring(0, 20) + '...')
-        
         const response = await fetch(`${API_BASE_URL}/api/users/profile`, {
           headers: {
             'Authorization': `Bearer ${token}`,
             'Content-Type': 'application/json'
           }
         })
-        
-        console.log('📡 Réponse API status:', response.status)
         
         if (!response.ok) {
           console.error('❌ ERREUR API:', response.status, response.statusText)
@@ -75,22 +71,12 @@ export default function NextOrderMapPage() {
         }
         
         const data = await response.json()
-        console.log('📦 Données utilisateur reçues:', JSON.stringify(data, null, 2))
         
-        if (!data.success) {
-          console.error('❌ ERREUR: API retourne success=false:', data)
+        if (!data.success || !data.data) {
+          console.error('❌ ERREUR: Données utilisateur manquantes')
           setNotification({
             type: "error",
-            message: data.message || "Erreur lors de la récupération du profil"
-          })
-          return
-        }
-        
-        if (!data.data) {
-          console.error('❌ ERREUR: Pas de données utilisateur dans la réponse')
-          setNotification({
-            type: "error",
-            message: "Données utilisateur manquantes"
+            message: "Erreur lors de la récupération du profil"
           })
           return
         }
@@ -100,11 +86,8 @@ export default function NextOrderMapPage() {
           employee_id: data.data.employee_info?._id || data.data.employee_info?.matricule
         }
         
-        console.log('👤 UserData final:', JSON.stringify(userData, null, 2))
-        
         if (!userData.employee_id) {
           console.error('❌ ERREUR: employee_id manquant dans userData')
-          console.error('employee_info disponible:', data.data.employee_info)
           setNotification({
             type: "error",
             message: "ID employé manquant - contactez l'administrateur"
@@ -117,7 +100,6 @@ export default function NextOrderMapPage() {
         
       } catch (error) {
         console.error('💥 EXCEPTION lors de la récupération utilisateur:', error)
-        console.error('Stack trace:', error.stack)
         setNotification({
           type: "error",
           message: `Erreur technique: ${error.message}`
@@ -127,220 +109,327 @@ export default function NextOrderMapPage() {
     fetchCurrentUser()
   }, [])
 
-  // Récupérer les données de livraison
+  // ✅ FONCTION CORRIGÉE: Analyse correcte des relations Planification-Livraison
+  const refreshDeliveryData = async () => {  
+    if (!currentUser?.employee_id) {  
+      console.log('⏳ ATTENTE: employee_id non disponible')  
+      return  
+    }  
+    
+    try {  
+      console.log('🔄 Rechargement des données...')  
+        
+       
+      const planificationsResponse = await planificationService.getPlanificationsByEmployee(currentUser.employee_id);  
+        
+      console.log('📋 Planifications brutes:', planificationsResponse.data?.length || 0)  
+        
+      // ✅ FILTRAGE SIMPLE: Exclure les commandes terminées  
+      const filteredPlanifications = planificationsResponse.data?.filter(planification => {  
+        const commandeStatut = planification.commande_id?.statut;  
+        const isCommandeTerminee = ['LIVREE', 'ANNULEE', 'ECHEC'].includes(commandeStatut);  
+          
+        console.log(`🔍 Planification ${planification._id}: commande ${commandeStatut}`)  
+          
+        // Garder seulement les commandes non terminées  
+        return !isCommandeTerminee;  
+      }) || [];  
+        
+      console.log('✅ Résultat final:')  
+      console.log(`  - Planifications gardées: ${filteredPlanifications.length}`)  
+    
+      setLivraisons(filteredPlanifications);  
+        
+    } catch (error) {  
+      console.error('💥 Erreur lors du rechargement:', error);  
+      setNotification({  
+        type: "error",  
+        message: `Erreur chargement: ${error.message}`  
+      })  
+    }  
+  };
+
+  // Récupérer les données de livraison au chargement
   useEffect(() => {
     const fetchDeliveryData = async () => {
       if (!currentUser?.employee_id) {
-        console.log('⏳ ATTENTE: employee_id non disponible:', currentUser)
         return
       }
 
       try {
         setLoading(true)
-        console.log('🚀 DÉBUT - Récupération données livraison pour employee_id:', currentUser.employee_id)
+        await refreshDeliveryData()
         
-        // 1. Récupérer les planifications PLANIFIE
-        console.log('📋 Récupération planifications...')
-        const planificationsResponse = await planificationService.getPlanificationsByEmployee(currentUser.employee_id)
-        console.log('📋 Planifications - Réponse brute:', JSON.stringify(planificationsResponse, null, 2))
-        
-        if (!planificationsResponse) {
-          console.error('❌ ERREUR: planificationsResponse est null/undefined')
-          throw new Error('Réponse planifications vide')
-        }
-        
-        if (!planificationsResponse.data) {
-          console.error('❌ ERREUR: planificationsResponse.data manquant')
-          console.error('Structure reçue:', Object.keys(planificationsResponse))
-          throw new Error('Données planifications manquantes')
-        }
-        
-        console.log('✅ Planifications trouvées:', planificationsResponse.data.length)
-        
-        // 2. Récupérer les livraisons EN_COURS
-        console.log('🚚 Récupération livraisons...')
-        const livraisonsResponse = await livraisonService.getLivraisons({
-          etat: 'EN_COURS',
-          livreur_employee_id: currentUser.employee_id
-        })
-        console.log('🚚 Livraisons - Réponse brute:', JSON.stringify(livraisonsResponse, null, 2))
-        
-        if (!livraisonsResponse) {
-          console.error('❌ ERREUR: livraisonsResponse est null/undefined')
-          throw new Error('Réponse livraisons vide')
-        }
-        
-        if (!livraisonsResponse.data) {
-          console.error('❌ ERREUR: livraisonsResponse.data manquant')
-          console.error('Structure reçue:', Object.keys(livraisonsResponse))
-          throw new Error('Données livraisons manquantes')
-        }
-        
-        console.log('✅ Livraisons trouvées:', livraisonsResponse.data.length)
-        
-        // 3. Combiner les données
-        const allDeliveries = [
-          ...planificationsResponse.data,
-          ...livraisonsResponse.data
-        ]
-        
-        console.log('🔄 Données combinées:', allDeliveries.length, 'éléments')
-        if (allDeliveries.length > 0) {
-          console.log('🔍 Premier élément (exemple):', JSON.stringify(allDeliveries[0], null, 2))
-        }
-        
-        if (allDeliveries.length === 0) {
-          console.warn('⚠️ ATTENTION: Aucune donnée trouvée pour ce chauffeur')
+        if (livraisons.length === 0) {
           setNotification({
             type: "info",
             message: "Aucune livraison assignée pour le moment"
           })
         }
         
-        setLivraisons(allDeliveries)
-        console.log('✅ Données sauvegardées dans l\'état')
-        
       } catch (error) {
         console.error('💥 EXCEPTION lors de la récupération des données:', error)
-        console.error('Stack trace:', error.stack)
-        console.error('Employee ID utilisé:', currentUser.employee_id)
-        
         setNotification({
           type: "error",
           message: `Erreur chargement: ${error.message}`
         })
       } finally {
         setLoading(false)
-        console.log('🏁 FIN - Récupération données (loading=false)')
       }
     }
 
     fetchDeliveryData()
   }, [currentUser])
 
-  // Transformer les données selon la structure JSON réelle
-  const transformLivraisonToOrder = (item) => {  
-    console.log('🔄 TRANSFORMATION - Item reçu:', JSON.stringify(item, null, 2))  
-      
-    if (!item) {  
-      console.error('❌ ERREUR TRANSFORMATION: Item est null/undefined')  
-      return null  
-    }  
-      
-    const itemId = item.id || item._id  
-      
-    if (!itemId) {  
-      console.error('❌ ERREUR TRANSFORMATION: id/_id manquant dans item:', item)  
-      return null  
-    }  
-      
-    const isPlanification = item.etat === 'PLANIFIE'  
-    const isLivraison = ['EN_COURS', 'LIVRE', 'ECHEC', 'PARTIELLE', 'ANNULE'].includes(item.etat)  
-      
-    // Structure unifiée - les données sont maintenant complètes pour les deux types  
-    const commandeData = item.commande_id  
-    const customerData = item.commande_id?.customer_id  
-    const addressData = item.commande_id?.address_id  
-      
-    if (!commandeData) {  
-      console.error('❌ ERREUR: commande_id manquant dans item')  
-      return null  
-    }  
-      
-    const transformedOrder = {  
-      id: itemId,  
-      orderNumber: commandeData?.numero_commande || 'N/A',  
-      planificationId: isPlanification ? itemId : (item.planificationId || itemId),  
-      customer: {  
-        id: customerData?._id || '',  
-        name: customerData?.physical_user_id   
-          ? `${customerData.physical_user_id.first_name} ${customerData.physical_user_id.last_name}`  
-          : 'Client inconnu',  
-        phone: customerData?.physical_user_id?.telephone_principal || '',  
-        email: '',  
-      },  
-      deliveryAddress: {  
-        street: addressData?.street || '',  
-        city: addressData?.city_id?.name || '',  
-        postalCode: '',  
-        latitude: addressData?.latitude || 0,  
-        longitude: addressData?.longitude || 0,  
-      },  
-      orderDate: commandeData?.date_commande || new Date().toISOString(),  
-      requestedDeliveryDate: item.delivery_date || item.date || new Date().toISOString(),  
-      status: mapLivraisonStatus(item.etat),  
-      priority: item.priority || 'medium',  
-      products: commandeData?.lignes || [],  
-      totalAmount: commandeData?.montant_total || item.total || 0,  
-      customerNotes: commandeData?.details || item.details || '',  
-      estimatedDeliveryTime: new Date(item.delivery_date || item.date || new Date()).toLocaleTimeString('fr-FR', {   
-        hour: '2-digit',   
-        minute: '2-digit'   
-      }),  
-      timeWindow: {  
-        start: new Date(item.delivery_date || item.date || new Date()).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' }),  
-        end: new Date(new Date(item.delivery_date || item.date || new Date()).getTime() + 2 * 60 * 60 * 1000).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })  
-      },  
-      distanceFromCurrent: 0,  
-      estimatedTravelTime: 0,  
-      livraisonId: isLivraison ? itemId : null,  
-      etat: item.etat,  
-      isPlanification,  
-      isLivraison  
-    }  
-      
-    console.log('✅ TRANSFORMATION RÉUSSIE:', JSON.stringify(transformedOrder, null, 2))  
-    return transformedOrder  
+  // ✅ TRANSFORMATION CORRIGÉE: Gestion correcte des types Planification/Livraison
+  const transformLivraisonToOrder = (item) => {
+    if (!item) return null
+    
+    const itemId = item.id || item._id
+    if (!itemId) return null
+    
+    // ✅ IDENTIFICATION CORRECTE DU TYPE basée sur les états métier
+    const isPlanification = item.etat === 'PLANIFIE'
+    const isLivraison = ['EN_COURS', 'LIVRE', 'ECHEC', 'ANNULE'].includes(item.etat)
+    
+    const commandeData = item.commande_id
+    const customerData = item.commande_id?.customer_id
+    const addressData = item.commande_id?.address_id
+    
+    if (!commandeData) return null
+    
+    return {
+      id: itemId,
+      orderNumber: commandeData?.numero_commande || 'N/A',
+      // ✅ GESTION CORRECTE DE L'ID DE PLANIFICATION
+      planificationId: isPlanification ? itemId : (item.planification_id?._id || item.planification_id || itemId),
+      customer: {
+        id: customerData?._id || '',
+        name: customerData?.physical_user_id 
+          ? `${customerData.physical_user_id.first_name} ${customerData.physical_user_id.last_name}`
+          : customerData?.moral_user_id?.raison_sociale || 'Client inconnu',
+        phone: customerData?.physical_user_id?.telephone_principal || 
+               customerData?.moral_user_id?.telephone_principal || '',
+        email: '',
+      },
+      deliveryAddress: {
+        street: addressData?.street || '',
+        city: addressData?.city_id?.name || '',
+        postalCode: addressData?.postal_code || '',
+        latitude: addressData?.latitude || 0,
+        longitude: addressData?.longitude || 0,
+      },
+      orderDate: commandeData?.date_commande || new Date().toISOString(),
+      requestedDeliveryDate: item.delivery_date || item.date || new Date().toISOString(),
+      status: mapLivraisonStatus(item.etat),
+      priority: item.priority || 'medium',
+      products: commandeData?.lignes || [],
+      totalAmount: commandeData?.montant_total || item.total || 0,
+      customerNotes: commandeData?.details || item.details || '',
+      estimatedDeliveryTime: new Date(item.delivery_date || item.date || new Date()).toLocaleTimeString('fr-FR', {
+        hour: '2-digit',
+        minute: '2-digit'
+      }),
+      timeWindow: {
+        start: new Date(item.delivery_date || item.date || new Date()).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' }),
+        end: new Date(new Date(item.delivery_date || item.date || new Date()).getTime() + 2 * 60 * 60 * 1000).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })
+      },
+      distanceFromCurrent: 0,
+      estimatedTravelTime: 0,
+      livraisonId: isLivraison ? itemId : null,
+      etat: item.etat,
+      isPlanification,
+      isLivraison,
+      history: [
+        {
+          id: `hist-${itemId}`,
+          action: isPlanification ? 'Commande assignée' : 'Livraison démarrée',
+          details: isPlanification ? 'Assignée au camion' : 'Chauffeur en route',
+          timestamp: item.createdAt || new Date().toISOString(),
+          userId: currentUser?.id || 'system',
+          userName: currentUser?.name || 'Système',
+        }
+      ]
+    }
   }
 
+  // Mapping des statuts métier vers statuts d'affichage
   const mapLivraisonStatus = (etat) => {
     switch (etat) {
       case 'PLANIFIE': return 'assigned'
       case 'EN_COURS': return 'en_route'
       case 'LIVRE': return 'delivered'
       case 'ECHEC': return 'failed'
-      case 'PARTIELLE': return 'partial'
       case 'ANNULE': return 'cancelled'
       default: return 'assigned'
     }
   }
 
-  // Convertir les livraisons en format d'affichage avec filtrage des null
+  // Convertir et filtrer les données pour l'affichage
   const orders = livraisons.map(transformLivraisonToOrder).filter(order => order !== null)
-  console.log('📊 RÉSULTATS TRANSFORMATION:')
-  console.log(`- Données brutes: ${livraisons.length} éléments`)
-  console.log(`- Orders transformées: ${orders.length} éléments`)
   
-  // Filtrer les commandes actives
+  // Filtrer les commandes actives (exclure les terminées)
   const activeOrders = orders.filter(order => 
     !['delivered', 'cancelled', 'failed'].includes(order.status)
   )
-  console.log(`📋 Commandes actives: ${activeOrders.length} sur ${orders.length}`)
 
-  if (activeOrders.length === 0 && orders.length > 0) {
-    console.warn('⚠️ ATTENTION: Toutes les commandes sont filtrées (delivered/cancelled/failed)')
-    console.log('Statuts des commandes:', orders.map(o => ({ id: o.id, status: o.status
-, etat: o.etat })))  
+  // Trier par priorité
+  const sortedOrders = [...activeOrders].sort((a, b) => {
+    const priorityOrder = { urgent: 4, high: 3, medium: 2, low: 1 }
+    const priorityDiff = priorityOrder[b.priority] - priorityOrder[a.priority]
+    if (priorityDiff !== 0) return priorityDiff
+    return (a.estimatedTravelTime || 0) - (b.estimatedTravelTime || 0)
+  })
+
+  const nextOrder = sortedOrders[0]
+
+  // ✅ DÉMARRAGE DE ROUTE CORRIGÉ: Gestion correcte de la transition Planification -> Livraison
+  const handleStartRoute = async (order) => {
+    if (!order.planificationId) {
+      setNotification({
+        type: "error",
+        message: "Impossible de démarrer la livraison - planification manquante"
+      })
+      return
+    }
+
+    setLoading(true)
+    try {
+      const deliveryData = {
+        latitude: currentUser?.currentLocation?.latitude || 0,
+        longitude: currentUser?.currentLocation?.longitude || 0,
+        details: `Démarrage de la livraison pour ${order.customer.name}`
+      }
+
+      console.log('🚀 Démarrage livraison pour planification:', order.planificationId)
+      
+      // Créer la livraison depuis la planification (relation 1:1)  
+      await livraisonService.startLivraison(order.planificationId, deliveryData)  
+  
+      // ✅ DÉLAI DE SYNCHRONISATION: Permettre au backend de traiter la création  
+      await new Promise(resolve => setTimeout(resolve, 1500));  
+  
+      // Recharger les données avec filtrage intelligent  
+      await refreshDeliveryData()  
+  
+      setNotification({  
+        type: "success",  
+        message: `Route démarrée vers ${order.customer.name}`  
+      })  
+  
+      // Ouvrir Google Maps  
+      const address = `${order.deliveryAddress.street}, ${order.deliveryAddress.city}`  
+      const encodedAddress = encodeURIComponent(address)  
+      console.log('🗺️ Ouverture Google Maps pour:', address)  
+      window.open(`https://www.google.com/maps/dir/?api=1&destination=${encodedAddress}`, "_blank")  
+  
+      setTimeout(() => setNotification(null), 5000)  
+    } catch (error) {  
+      console.error('💥 EXCEPTION démarrage route:', error)  
+      setNotification({  
+        type: "error",  
+        message: "Erreur lors du démarrage de la route"  
+      })  
+    } finally {  
+      setLoading(false)  
+    }  
   }  
   
-  // Trier par priorité  
-  const sortedOrders = [...activeOrders].sort((a, b) => {  
-    const priorityOrder = { urgent: 4, high: 3, medium: 2, low: 1 }  
-    const priorityDiff = priorityOrder[b.priority] - priorityOrder[a.priority]  
-    if (priorityDiff !== 0) return priorityDiff  
-    return (a.estimatedTravelTime || 0) - (b.estimatedTravelTime || 0)  
-  })  
+  // ✅ GESTION DES CHANGEMENTS DE STATUT CORRIGÉE  
+  const handleStatusChange = async (order, newStatus, note = '') => {  
+    setLoading(true)  
+    try {  
+      const statusMapping = {  
+        'delivered': 'LIVRE',  
+        'failed': 'ECHEC',  
+        'cancelled': 'ANNULE'  
+      }  
   
-  const nextOrder = sortedOrders[0]  
-  console.log('🎯 Prochaine commande:', nextOrder ? JSON.stringify(nextOrder, null, 2) : 'Aucune')  
+      let livraisonId = null  
   
-  useEffect(() => {  
-    const timer = setTimeout(() => {  
-      setMapLoaded(true)  
-    }, 1500)  
-    return () => clearTimeout(timer)  
-  }, [])  
+      // ✅ RECHERCHE INTELLIGENTE: Chercher une livraison existante  
+      try {  
+        console.log('🔍 Recherche livraison pour planification:', order.planificationId)  
+          
+        // Utiliser l'API pour chercher par planification_id  
+        const existingLivraisons = await livraisonService.getLivraisons({  
+          planification_id: order.planificationId,  
+          etat: 'EN_COURS'  
+        })  
   
+        if (existingLivraisons.data && existingLivraisons.data.length > 0) {  
+          const existingLivraison = existingLivraisons.data[0]  
+          livraisonId = existingLivraison.id || existingLivraison._id  
+          console.log('✅ Livraison existante trouvée:', livraisonId)  
+        }  
+      } catch (searchError) {  
+        console.error('❌ Erreur recherche livraison:', searchError)  
+      }  
+  
+      // ✅ CRÉATION AUTOMATIQUE: Si aucune livraison trouvée pour une planification  
+      if (!livraisonId && order.isPlanification && order.etat === 'PLANIFIE') {  
+        console.log('📋 Création automatique de livraison pour planification')  
+          
+        const deliveryData = {  
+          latitude: currentUser?.currentLocation?.latitude || 0,  
+          longitude: currentUser?.currentLocation?.longitude || 0,  
+          details: `Démarrage automatique pour changement de statut`  
+        }  
+  
+        const startResult = await livraisonService.startLivraison(order.planificationId, deliveryData)  
+        livraisonId = startResult.data?._id || startResult._id  
+          
+        // Délai pour permettre la création  
+        await new Promise(resolve => setTimeout(resolve, 1000));  
+      }  
+  
+      if (!livraisonId) {  
+        throw new Error('Impossible de trouver ou créer une livraison')  
+      }  
+  
+      // ✅ FINALISATION: Compléter la livraison  
+      const completionData = {  
+        latitude: currentUser?.currentLocation?.latitude || 0,  
+        longitude: currentUser?.currentLocation?.longitude || 0,  
+        details: note,  
+        commentaires_livreur: note,  
+        etat: statusMapping[newStatus] || 'LIVRE'  
+      }  
+  
+      console.log('📤 Finalisation livraison:', livraisonId, 'avec statut:', statusMapping[newStatus])  
+      await livraisonService.completeLivraison(livraisonId, completionData)  
+  
+      // ✅ SYNCHRONISATION: Délai et rechargement  
+      await new Promise(resolve => setTimeout(resolve, 1500));  
+      await refreshDeliveryData()  
+  
+      setIsStatusModalOpen(false)  
+      setStatusNote('')  
+  
+      const statusText = {  
+        'delivered': 'livrée',  
+        'failed': 'annulée (échec)',  
+        'cancelled': 'annulée'  
+      }  
+  
+      setNotification({  
+        type: "success",  
+        message: `Commande ${order.orderNumber} marquée comme ${statusText[newStatus]}`  
+      })  
+  
+      setTimeout(() => setNotification(null), 5000)  
+    } catch (error) {  
+      console.error('💥 EXCEPTION changement statut:', error)  
+      setNotification({  
+        type: "error",  
+        message: "Erreur lors de la mise à jour du statut"  
+      })  
+    } finally {  
+      setLoading(false)  
+    }  
+  }  
+  
+  // Fonctions utilitaires pour l'affichage  
   const getPriorityColor = (priority) => {  
     switch (priority) {  
       case "urgent": return "nom-priority-urgent"  
@@ -381,7 +470,7 @@ export default function NextOrderMapPage() {
       case "en_route": return "nom-status-en-route"  
       case "delivered": return "nom-status-delivered"  
       case "failed": return "nom-status-failed"  
-      case "partial": return "nom-status-partial"  
+      case "cancelled": return "nom-status-cancelled"  
       default: return "nom-status-default"  
     }  
   }  
@@ -392,212 +481,15 @@ export default function NextOrderMapPage() {
       case "en_route": return "En route"  
       case "delivered": return "Livrée"  
       case "failed": return "Échec"  
-      case "partial": return "Partielle"  
+      case "cancelled": return "Annulée"  
       default: return status  
     }  
   }  
   
   const handleViewDetails = (order) => {  
-    console.log('🔍 AFFICHAGE DÉTAILS - Order reçue:', JSON.stringify(order, null, 2))  
     setSelectedOrder(order)  
     setIsDetailsModalOpen(true)  
   }  
-  
-  // Démarrer une route avec logs détaillés  
-  const handleStartRoute = async (order) => {  
-    console.log('🚀 DÉMARRAGE ROUTE - Order reçue:', JSON.stringify(order, null, 2))  
-      
-    if (!order.planificationId) {  
-      console.error('❌ ERREUR: planificationId manquant dans order')  
-      setNotification({  
-        type: "error",  
-        message: "Impossible de démarrer la livraison - planification manquante"  
-      })  
-      return  
-    }  
-  
-    console.log('✅ PlanificationId trouvé:', order.planificationId)  
-    setLoading(true)  
-      
-    try {  
-      const deliveryData = {  
-        latitude: currentUser?.currentLocation?.latitude || 0,  
-        longitude: currentUser?.currentLocation?.longitude || 0,  
-        details: `Démarrage de la livraison pour ${order.customer.name}`  
-      }  
-        
-      console.log('📤 Envoi données démarrage:', JSON.stringify(deliveryData, null, 2))  
-  
-      // Créer la livraison depuis la planification  
-      const result = await livraisonService.startLivraison(order.planificationId, deliveryData)  
-      console.log('✅ Livraison créée:', JSON.stringify(result, null, 2))  
-        
-      // Recharger les données  
-      console.log('🔄 Rechargement des données...')  
-      const refreshedData = await planificationService.getPlanificationsByEmployee(currentUser.employee_id)  
-      const livraisonsResponse = await livraisonService.getLivraisons({  
-        etat: 'EN_COURS',  
-        livreur_employee_id: currentUser.employee_id  
-      })  
-        
-      const allDeliveries = [  
-        ...refreshedData.data,  
-        ...livraisonsResponse.data  
-      ]  
-        
-      console.log('✅ Données rechargées:', allDeliveries.length, 'éléments')  
-      setLivraisons(allDeliveries)  
-  
-      setNotification({  
-        type: "success",  
-        message: `Route démarrée vers ${order.customer.name}`  
-      })  
-  
-      // Ouvrir Google Maps  
-      const address = `${order.deliveryAddress.street}, ${order.deliveryAddress.city}`  
-      const encodedAddress = encodeURIComponent(address)  
-      console.log('🗺️ Ouverture Google Maps pour:', address)  
-      window.open(`https://www.google.com/maps/dir/?api=1&destination=${encodedAddress}`, "_blank")  
-  
-      setTimeout(() => setNotification(null), 5000)  
-    } catch (error) {  
-      console.error('💥 EXCEPTION démarrage route:', error)  
-      console.error('Stack trace:', error.stack)  
-      setNotification({  
-        type: "error",  
-        message: "Erreur lors du démarrage de la route"  
-      })  
-    } finally {  
-      setLoading(false)  
-      console.log('🏁 FIN démarrage route (loading=false)')  
-    }  
-  }  
-  
-  // Gérer les changements de statut avec logs détaillés  
-const handleStatusChange = async (order, newStatus, note = '') => {  
-  console.log('🔄 CHANGEMENT STATUT - Début')  
-  console.log('Order:', JSON.stringify(order, null, 2))  
-  console.log('Nouveau statut:', newStatus)  
-  console.log('Note:', note)  
-    
-  setLoading(true)  
-  try {  
-    const statusMapping = {  
-      'LIVRE': 'LIVRE',  
-      'PARTIELLE': 'LIVRE',  
-      'ECHEC': 'ANNULE',  
-      'ANNULE': 'ANNULE'  
-    }  
-      
-    console.log('📊 Mapping statut:', newStatus, '→', statusMapping[newStatus.toUpperCase()])  
-  
-    let livraisonId = null  
-  
-    // CORRECTION : Toujours chercher une livraison existante d'abord  
-    console.log('🔍 Recherche livraison existante pour planification:', order.planificationId)  
-      
-    try {  
-      const existingLivraisons = await livraisonService.getLivraisons({  
-        planificationId: order.planificationId  
-      })  
-        
-      console.log('🔍 Résultat recherche livraisons:', JSON.stringify(existingLivraisons, null, 2))  
-        
-      if (existingLivraisons.data && existingLivraisons.data.length > 0) {  
-        // Utiliser l'ID de la livraison existante (soit id soit _id selon la structure)  
-        const existingLivraison = existingLivraisons.data[0]  
-        livraisonId = existingLivraison.id || existingLivraison._id  
-        console.log('✅ Livraison existante trouvée avec ID:', livraisonId)  
-      }  
-    } catch (searchError) {  
-      console.error('❌ Erreur lors de la recherche de livraison existante:', searchError)  
-    }  
-  
-    // Si aucune livraison trouvée et que c'est une planification, la créer  
-    if (!livraisonId && order.isPlanification && order.etat === 'PLANIFIE') {  
-      console.log('📋 Création nouvelle livraison pour planification')  
-        
-      const deliveryData = {  
-        latitude: currentUser?.currentLocation?.latitude || 0,  
-        longitude: currentUser?.currentLocation?.longitude || 0,  
-        details: `Démarrage automatique pour changement de statut`  
-      }  
-        
-      console.log('🚀 Démarrage automatique livraison...')  
-      const startResult = await livraisonService.startLivraison(order.planificationId, deliveryData)  
-      console.log('✅ Livraison créée automatiquement:', JSON.stringify(startResult, null, 2))  
-        
-      // Récupérer l'ID de la livraison créée  
-      livraisonId = startResult.data?._id || startResult._id  
-    }  
-  
-    // Vérification finale de l'ID  
-    if (!livraisonId) {  
-      console.error('❌ ERREUR: Impossible de déterminer livraisonId')  
-      throw new Error('Impossible de trouver ou créer une livraison')  
-    }  
-  
-    console.log('✅ ID de livraison final:', livraisonId)  
-  
-    // Compléter la livraison  
-    const completionData = {  
-      latitude: currentUser?.currentLocation?.latitude || 0,  
-      longitude: currentUser?.currentLocation?.longitude || 0,  
-      details: note,  
-      commentaires_livreur: note,  
-      etat: statusMapping[newStatus.toUpperCase()] || 'LIVRE'  
-    }  
-      
-    console.log('📤 Finalisation avec données:', JSON.stringify(completionData, null, 2))  
-    console.log('📤 Utilisation livraisonId:', livraisonId)  
-      
-    await livraisonService.completeLivraison(livraisonId, completionData)  
-    console.log('✅ Livraison finalisée')  
-  
-    // Recharger les données  
-    console.log('🔄 Rechargement données après changement statut...')  
-    const refreshedData = await planificationService.getPlanificationsByEmployee(currentUser.employee_id)  
-    const livraisonsResponse = await livraisonService.getLivraisons({  
-      etat: 'EN_COURS',  
-      livreur_employee_id: currentUser.employee_id  
-    })  
-      
-    const allDeliveries = [  
-      ...refreshedData.data,  
-      ...livraisonsResponse.data  
-    ]  
-      
-    console.log('✅ Données rechargées après changement statut:', allDeliveries.length, 'éléments')  
-    setLivraisons(allDeliveries)  
-  
-    setIsStatusModalOpen(false)  
-    setStatusNote('')  
-      
-    const statusText = {  
-      'LIVRE': 'livrée',  
-      'PARTIELLE': 'livrée (partielle)',  
-      'ECHEC': 'annulée (échec)',  
-      'ANNULE': 'annulée'  
-    }  
-  
-    setNotification({  
-      type: "success",  
-      message: `Commande ${order.orderNumber} marquée comme ${statusText[newStatus.toUpperCase()]}`  
-    })  
-  
-    setTimeout(() => setNotification(null), 5000)  
-  } catch (error) {  
-    console.error('💥 EXCEPTION changement statut:', error)  
-    console.error('Stack trace:', error.stack)  
-    setNotification({  
-      type: "error",  
-      message: "Erreur lors de la mise à jour du statut"  
-    })  
-  } finally {  
-    setLoading(false)  
-    console.log('🏁 FIN changement statut (loading=false)')  
-  }  
-}
   
   const getMapMarkerColor = (priority) => {  
     switch (priority) {  
@@ -608,6 +500,13 @@ const handleStatusChange = async (order, newStatus, note = '') => {
       default: return "#6b7280"  
     }  
   }  
+  
+  useEffect(() => {  
+    const timer = setTimeout(() => {  
+      setMapLoaded(true)  
+    }, 1500)  
+    return () => clearTimeout(timer)  
+  }, [])  
   
   if (loading && livraisons.length === 0) {  
     return (  
@@ -696,18 +595,17 @@ const handleStatusChange = async (order, newStatus, note = '') => {
                     </div>  
                     <div className="nom-priority-actions">  
                       <button   
-                        className="nom-btn nom-btn-secondary"
+                        className="nom-btn nom-btn-secondary"   
                         onClick={() => handleViewDetails(nextOrder)}  
                       >  
                         Détails  
                       </button>  
                         
-                      {/* Boutons pour marquer le statut */}  
                       <button   
                         className="nom-btn nom-btn-success"   
                         onClick={() => {  
                           setSelectedOrder(nextOrder)  
-                          setStatusAction('LIVRE')  
+                          setStatusAction('delivered')  
                           setIsStatusModalOpen(true)  
                         }}  
                         disabled={loading}  
@@ -717,23 +615,10 @@ const handleStatusChange = async (order, newStatus, note = '') => {
                       </button>  
   
                       <button   
-                        className="nom-btn nom-btn-warning"   
-                        onClick={() => {  
-                          setSelectedOrder(nextOrder)  
-                          setStatusAction('PARTIELLE')  
-                          setIsStatusModalOpen(true)  
-                        }}  
-                        disabled={loading}  
-                      >  
-                        <Package className="nom-btn-icon" />  
-                        Livraison Partielle  
-                      </button>  
-  
-                      <button   
                         className="nom-btn nom-btn-danger"   
                         onClick={() => {  
                           setSelectedOrder(nextOrder)  
-                          setStatusAction('ECHEC')  
+                          setStatusAction('failed')  
                           setIsStatusModalOpen(true)  
                         }}  
                         disabled={loading}  
@@ -766,7 +651,6 @@ const handleStatusChange = async (order, newStatus, note = '') => {
                 </div>  
               </div>  
             )}  
-  
             <div className="nom-content-grid">  
               {/* Map Section */}  
               <div className="nom-map-section">  
@@ -788,9 +672,8 @@ const handleStatusChange = async (order, newStatus, note = '') => {
                         </div>  
                       ) : (  
                         <div className="nom-map-wrapper">  
-                          {/* Simulated Map Background */}  
                           <div className="nom-map-bg" />  
-  
+                            
                           {/* Map Legend */}  
                           <div className="nom-map-legend">  
                             <h4 className="nom-legend-title">Légende des Priorités</h4>  
@@ -814,7 +697,7 @@ const handleStatusChange = async (order, newStatus, note = '') => {
                             </div>  
                           </div>  
   
-                          {/* Simulated Map Markers */}  
+                          {/* Map Markers */}  
                           <div className="nom-map-markers">  
                             {activeOrders.map((order, index) => (  
                               <div  
@@ -1001,18 +884,22 @@ const handleStatusChange = async (order, newStatus, note = '') => {
                       {selectedOrder.products.map((product) => (  
                         <div key={product._id || product.id} className="nom-product-item">  
                           <div className="nom-product-info">  
-                            <h5 className="nom-product-name">{product.product_id?.long_name || product.product_id?.short_name || product.productName}</h5>  
-                            <p className="nom-product-code">Code: {product.product_id?.ref || product.productCode}</p>  
+                            <h5 className="nom-product-name">  
+                              {product.product_id?.long_name || product.product_id?.short_name || product.productName}  
+                            </h5>  
+                            <p className="nom-product-code">  
+                              Code: {product.product_id?.ref || product.productCode}  
+                            </p>  
                           </div>  
                           <div className="nom-product-details">  
                             <p className="nom-product-quantity">  
                               {product.quantity} {product.UM_id?.unitemesure || product.unit}  
                             </p>  
                             <p className="nom-product-price">  
-                              {(product.price)?.toFixed(2)}MAD / unité  
+                              {(product.price || product.unitPrice)?.toFixed(2)}MAD / unité  
                             </p>  
                             <p className="nom-product-total">  
-                              Total: {(product.quantity * product.price)?.toFixed(2)}MAD  
+                              Total: {((product.quantity * (product.price || product.unitPrice)) || product.totalPrice)?.toFixed(2)}MAD  
                             </p>  
                           </div>  
                         </div>  
@@ -1041,6 +928,34 @@ const handleStatusChange = async (order, newStatus, note = '') => {
                   </div>  
                 </div>  
               )}  
+  
+              {/* Order History */}  
+              <div className="nom-details-section nom-full-width">  
+                <div className="nom-details-card">  
+                  <div className="nom-details-header">  
+                    <h4 className="nom-details-title">Historique de la Commande</h4>  
+                  </div>  
+                  <div className="nom-details-content">  
+                    <div className="nom-history-list">  
+                      {selectedOrder.history.map((entry) => (  
+                        <div key={entry.id} className="nom-history-item">  
+                          <div className="nom-history-dot"></div>  
+                          <div className="nom-history-content">  
+                            <div className="nom-history-header">  
+                              <h5 className="nom-history-action">{entry.action}</h5>  
+                              <span className="nom-history-time">  
+                                {new Date(entry.timestamp).toLocaleString('fr-FR')}  
+                              </span>  
+                            </div>  
+                            <p className="nom-history-details">{entry.details}</p>  
+                            <p className="nom-history-user">Par: {entry.userName}</p>  
+                          </div>  
+                        </div>  
+                      ))}  
+                    </div>  
+                  </div>  
+                </div>  
+              </div>  
             </div>  
   
             <div className="nom-modal-footer">  
@@ -1077,17 +992,26 @@ const handleStatusChange = async (order, newStatus, note = '') => {
       {/* Status Change Modal */}  
       {isStatusModalOpen && selectedOrder && (  
         <div className="nom-modal-overlay" onClick={() => setIsStatusModalOpen(false)}>  
-          <div className="nom-modal-content" onClick={(e) => e.stopPropagation()}>  
+          <div className="nom-modal-content nom-status-modal" onClick={(e) => e.stopPropagation()}>  
             <div className="nom-modal-header">  
               <div className="nom-modal-title">  
-                <CheckCircle className="nom-modal-icon" />  
-                <span>  
-                  {statusAction === 'LIVRE' && 'Marquer comme Livrée'}  
-                  {statusAction === 'PARTIELLE' && 'Livraison Partielle'}  
-                  {statusAction === 'ECHEC' && 'Signaler un Échec'}  
-                  {statusAction === 'ANNULE' && 'Annuler la Livraison'}  
-                </span>  
-              </div>  
+                {statusAction === 'delivered' ? (  
+                  <>  
+                    <CheckCircle className="nom-modal-icon" />  
+                    <span>Marquer comme Livrée</span>  
+                  </>  
+                ) : statusAction === 'failed' ? (  
+                  <>  
+                    <X className="nom-modal-icon" />  
+                    <span>Signaler un Échec</span>  
+                  </>  
+                ) : (  
+                  <>  
+                    <X className="nom-modal-icon" />  
+                    <span>Annuler la Commande</span>  
+                  </>  
+                )}  
+              </div>
               <button   
                 className="nom-modal-close"   
                 onClick={() => setIsStatusModalOpen(false)}  
@@ -1098,31 +1022,29 @@ const handleStatusChange = async (order, newStatus, note = '') => {
   
             <div className="nom-modal-body">  
               <div className="nom-status-info">  
-                <h4>Commande: {selectedOrder.orderNumber}</h4>  
-                <p>Client: {selectedOrder.customer.name}</p>  
+                <h3 className="nom-status-customer">{selectedOrder.customer.name}</h3>  
+                <p className="nom-status-order">Commande: {selectedOrder.orderNumber}</p>  
                 <p>Adresse: {selectedOrder.deliveryAddress.street}, {selectedOrder.deliveryAddress.city}</p>  
               </div>  
   
               <div className="nom-form-group">  
-                <label htmlFor="statusNote" className="nom-form-label">  
-                  {statusAction === 'LIVRE' && 'Commentaires sur la livraison (optionnel)'}  
-                  {statusAction === 'PARTIELLE' && 'Détails sur les produits non livrés'}  
-                  {statusAction === 'ECHEC' && 'Raison de l\'échec'}  
-                  {statusAction === 'ANNULE' && 'Raison de l\'annulation'}  
+                <label htmlFor="status-note" className="nom-form-label">  
+                  {statusAction === 'delivered' ? 'Note de livraison (optionnel)' :   
+                   statusAction === 'failed' ? 'Raison de l\'échec' : 'Raison de l\'annulation'}  
                 </label>  
                 <textarea  
-                  id="statusNote"  
-                  className="nom-form-textarea"  
+                  id="status-note"  
                   value={statusNote}  
                   onChange={(e) => setStatusNote(e.target.value)}  
-                  placeholder={  
-                    statusAction === 'LIVRE' ? 'Livraison effectuée sans problème...' :  
-                    statusAction === 'PARTIELLE' ? 'Produits manquants: ...' :  
-                    statusAction === 'ECHEC' ? 'Client absent, adresse incorrecte...' :  
-                    'Raison de l\'annulation...'  
+                  placeholder={statusAction === 'delivered'   
+                    ? "Ajouter une note sur la livraison..."   
+                    : statusAction === 'failed'  
+                    ? "Client absent, adresse incorrecte..."  
+                    : "Expliquer la raison de l'annulation..."  
                   }  
-                  rows={4}  
-                  required={statusAction !== 'LIVRE'}  
+                  className="nom-form-textarea"  
+                  rows={3}  
+                  required={statusAction !== 'delivered'}  
                 />  
               </div>  
             </div>  
@@ -1131,28 +1053,32 @@ const handleStatusChange = async (order, newStatus, note = '') => {
               <button   
                 className="nom-btn nom-btn-secondary"   
                 onClick={() => setIsStatusModalOpen(false)}  
-                disabled={loading}  
               >  
                 Annuler  
               </button>  
               <button   
-                className={`nom-btn ${  
-                  statusAction === 'LIVRE' ? 'nom-btn-success' :  
-                  statusAction === 'PARTIELLE' ? 'nom-btn-warning' :  
-                  'nom-btn-danger'  
-                }`}  
+                className={`nom-btn ${statusAction === 'delivered' ? 'nom-btn-success' : 'nom-btn-danger'}`}  
                 onClick={() => handleStatusChange(selectedOrder, statusAction, statusNote)}  
-                disabled={loading || (statusAction !== 'LIVRE' && !statusNote.trim())}  
+                disabled={loading || (statusAction !== 'delivered' && !statusNote.trim())}  
               >  
                 {loading ? (  
                   <>  
                     <Loader2 className="nom-btn-icon nom-spinner" />  
-                    Mise à jour...  
+                    Traitement...  
                   </>  
                 ) : (  
                   <>  
-                    <CheckCircle className="nom-btn-icon" />  
-                    Confirmer  
+                    {statusAction === 'delivered' ? (  
+                      <>  
+                        <CheckCircle className="nom-btn-icon" />  
+                        Confirmer Livraison  
+                      </>  
+                    ) : (  
+                      <>  
+                        <X className="nom-btn-icon" />  
+                        Confirmer  
+                      </>  
+                    )}  
                   </>  
                 )}  
               </button>  

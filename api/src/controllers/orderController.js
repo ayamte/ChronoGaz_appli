@@ -11,8 +11,8 @@ const Product = require('../models/Product');
 const Um = require('../models/Um');    
 const mongoose = require('mongoose');    
 const Truck = require('../models/Truck');
-  
-// Récupérer toutes les commandes avec filtres  
+
+// ✅ CORRIGÉ: Récupérer toutes les commandes avec filtres basés sur les statuts de commande
 const getCommands = async (req, res) => {    
   try {    
     const { page = 1, limit = 20, status, search, priority, dateFrom, dateTo, customerId } = req.query;    
@@ -20,25 +20,23 @@ const getCommands = async (req, res) => {
     const filter = {};    
     const skip = (parseInt(page) - 1) * parseInt(limit);    
         
-    // ✅ MODIFIÉ: Filtre basé sur l'état de planification au lieu de statut    
+    // ✅ NOUVEAU: Filtre basé sur le statut de commande directement
     if (status && status !== 'all') {    
-      const statusToPlanificationState = {    
-        'pending': null,  
-        'assigned': 'PLANIFIE',    
+      const statusToCommandeState = {    
+        'pending': 'CONFIRMEE',
+        'assigned': 'ASSIGNEE',    
         'in_progress': 'EN_COURS',     
-        'delivered': 'LIVRE',    
-        'cancelled': 'ANNULE'    
+        'delivered': 'LIVREE',    
+        'cancelled': ['ANNULEE', 'ECHOUEE']
       };    
           
-      if (status === 'pending') {    
-        const commandsWithPlanification = await Planification.distinct('commande_id');    
-        filter._id = { $nin: commandsWithPlanification };    
-      } else {    
-        const planificationsIds = await Planification.find({     
-          etat: statusToPlanificationState[status]     
-        }).distinct('commande_id');    
-        filter._id = { $in: planificationsIds };    
-      }    
+      if (statusToCommandeState[status]) {
+        if (Array.isArray(statusToCommandeState[status])) {
+          filter.statut = { $in: statusToCommandeState[status] };
+        } else {
+          filter.statut = statusToCommandeState[status];
+        }
+      }
     }    
         
     if (customerId && mongoose.Types.ObjectId.isValid(customerId)) {    
@@ -61,7 +59,7 @@ const getCommands = async (req, res) => {
       }    
     }    
         
-    // ✅ MODIFIÉ: Filtre de priorité basé sur la planification    
+    // ✅ NOUVEAU: Filtre de priorité basé sur la planification (garde la logique existante)
     if (priority && priority !== 'all') {    
       const planificationsIds = await Planification.find({     
         priority: priority     
@@ -156,8 +154,8 @@ const getCommands = async (req, res) => {
     });    
   }    
 };    
-  
-// Récupérer une commande par ID  
+
+// Récupérer une commande par ID (reste identique)
 const getCommandById = async (req, res) => {  
   try {  
     const { id } = req.params;  
@@ -242,8 +240,8 @@ const getCommandById = async (req, res) => {
     });  
   }  
 };  
-  
-// Créer une nouvelle commande  
+
+// Créer une nouvelle commande (reste identique)
 const createCommand = async (req, res) => {  
   try {  
     const {  
@@ -409,8 +407,8 @@ const createCommand = async (req, res) => {
     });  
   }  
 };  
-  
-// ✅ CORRIGÉ: Annuler une commande basé sur la planification  
+
+// ✅ CORRIGÉ: Annuler une commande basé sur le statut de commande
 const cancelOrder = async (req, res) => {    
   try {    
     const { id } = req.params;    
@@ -431,42 +429,23 @@ const cancelOrder = async (req, res) => {
       });    
     }    
     
-    // ✅ CORRIGÉ: Vérifier l'état de la planification au lieu du statut de commande  
-    const planification = await Planification.findOne({ commande_id: id });  
-      
-    if (planification) {  
-      // Vérifier si la planification peut être annulée  
-      const etatsNonAnnulables = ['EN_COURS', 'LIVRE'];  
-      if (etatsNonAnnulables.includes(planification.etat)) {  
-        return res.status(400).json({  
-          success: false,  
-          message: `Impossible d'annuler une commande avec une planification "${planification.etat}"`  
-        });  
-      }  
-        
-      // Vérifier s'il y a une livraison en cours  
-      const livraison = await Livraison.findOne({   
-        planification_id: planification._id,  
-        etat: 'EN_COURS'  
-      });  
-        
-      if (livraison) {  
-        return res.status(400).json({  
-          success: false,  
-          message: 'Impossible d\'annuler une commande avec une livraison en cours'  
-        });  
-      }  
-        
-      // Marquer la planification comme annulée  
-      planification.etat = 'ANNULE';  
-      await planification.save();  
-    }  
+    // ✅ NOUVEAU: Vérifier l'état de la commande directement
+    const etatsNonAnnulables = ['EN_COURS', 'LIVREE'];
+    if (etatsNonAnnulables.includes(commande.statut)) {
+      return res.status(400).json({
+        success: false,
+        message: `Impossible d'annuler une commande avec le statut "${commande.statut}"`
+      });
+    }
     
-    // Mettre à jour les détails de la commande  
-    if (raison_annulation) {    
-      commande.details = `${commande.details || ''}\nRaison d'annulation: ${raison_annulation}`;    
-    }    
-    await commande.save();    
+    // Annuler la planification si elle existe
+    const planification = await Planification.findOne({ commande_id: id });
+    if (planification && planification.etat === 'PLANIFIE') {
+      planification.etat = 'ANNULE';
+      planification.raison_annulation = raison_annulation;
+      await planification.save();
+      // La synchronisation avec la commande se fait automatiquement via le middleware
+    }
     
     res.status(200).json({    
       success: true,    
@@ -482,8 +461,8 @@ const cancelOrder = async (req, res) => {
     });    
   }    
 };    
-  
-// Récupérer les commandes par client    
+
+// Récupérer les commandes par client (reste identique)
 const getCommandsByCustomerId = async (req, res) => {    
   try {    
     const { customerId } = req.params;    
@@ -508,14 +487,12 @@ const getCommandsByCustomerId = async (req, res) => {
       })    
       .sort({ date_commande: -1 });    
     
-    // Enrichir avec les lignes de commande et planifications  
     const commandsWithLines = await Promise.all(    
       commands.map(async (command) => {    
         const lignes = await CommandeLine.find({ commande_id: command._id })    
           .populate('product_id', 'ref long_name short_name brand gamme prix')    
           .populate('UM_id', 'unitemesure');    
   
-        // ✅ AJOUTÉ: Récupérer la planification pour chaque commande  
         const planification = await Planification.findOne({ commande_id: command._id })  
           .populate('trucks_id', 'matricule marque')  
           .populate({  
@@ -548,8 +525,8 @@ const getCommandsByCustomerId = async (req, res) => {
     });    
   }    
 };    
-  
-// Mettre à jour une commande    
+
+// Mettre à jour une commande (reste identique)
 const updateCommandById = async (req, res) => {    
   try {    
     const { id } = req.params;    
@@ -602,12 +579,12 @@ const updateCommandById = async (req, res) => {
     });    
   }    
 };    
-  
-// Mettre à jour le statut d'une commande avec planification    
+
+// ✅ CORRIGÉ: Mettre à jour le statut d'une commande avec validation
 const updateCommandStatus = async (req, res) => {  
   try {  
     const { id } = req.params;  
-    const { truck_id, delivery_date, priority } = req.body; // Retirer accompagnateur_id aussi  
+    const { truck_id, delivery_date, priority } = req.body;
       
     if (!mongoose.Types.ObjectId.isValid(id)) {  
       return res.status(400).json({  
@@ -622,8 +599,25 @@ const updateCommandStatus = async (req, res) => {
         message: 'truck_id et delivery_date sont requis pour planifier la commande'  
       });  
     }  
+
+    // ✅ NOUVEAU: Vérifier que la commande est dans un état planifiable
+    const commande = await Command.findById(id);
+    if (!commande) {
+      return res.status(404).json({
+        success: false,
+        message: 'Commande non trouvée'
+      });
+    }
+
+    // ✅ NOUVEAU: Vérifier les états autorisés pour la planification
+    const etatsAutorisesPlanning = ['CONFIRMEE', 'ASSIGNEE'];
+    if (!etatsAutorisesPlanning.includes(commande.statut)) {
+      return res.status(400).json({
+        success: false,
+        message: `Impossible de planifier une commande avec le statut "${commande.statut}"`
+      });
+    }
       
-    // Récupérer le camion avec son chauffeur ET son accompagnateur  
     const truck = await Truck.findById(truck_id)  
       .populate('driver')  
       .populate('accompagnant');  
@@ -642,51 +636,53 @@ const updateCommandStatus = async (req, res) => {
       });  
     }  
   
-    // Récupérer automatiquement le chauffeur et l'accompagnateur du camion  
     const livreur_employee_id = truck.driver._id;  
     const accompagnateur_id = truck.accompagnant ? truck.accompagnant._id : null;  
       
-    // Vérifier si une planification existe déjà  
     const planificationExistante = await Planification.findOne({ commande_id: id });  
       
     if (planificationExistante) {  
-      // Mettre à jour la planification existante  
+      // ✅ NOUVEAU: Vérifier que la planification peut être modifiée
+      if (planificationExistante.etat === 'ANNULE') {
+        return res.status(400).json({
+          success: false,
+          message: 'Impossible de modifier une planification annulée'
+        });
+      }
+
       planificationExistante.trucks_id = truck_id;  
       planificationExistante.livreur_employee_id = livreur_employee_id;  
-      planificationExistante.accompagnateur_id = accompagnateur_id; // Automatique depuis le camion  
+      planificationExistante.accompagnateur_id = accompagnateur_id;
       planificationExistante.delivery_date = delivery_date;  
       planificationExistante.priority = priority || 'medium';  
       planificationExistante.etat = 'PLANIFIE';  
         
-      await planificationExistante.save();  
+      await planificationExistante.save();
+      // La synchronisation avec la commande se fait automatiquement via le middleware
         
       return res.status(200).json({  
         success: true,  
         message: 'Planification mise à jour avec succès',  
-        data: {  
-          planification: planificationExistante  
-        }  
+        data: { planification: planificationExistante }  
       });  
     } else {  
-      // Créer une nouvelle planification  
       const nouvellePlanification = new Planification({  
         commande_id: id,  
         trucks_id: truck_id,  
-        livreur_employee_id: livreur_employee_id, // Automatique depuis le camion  
-        accompagnateur_id: accompagnateur_id, // Automatique depuis le camion  
+        livreur_employee_id: livreur_employee_id,
+        accompagnateur_id: accompagnateur_id,
         delivery_date,  
         priority: priority || 'medium',  
         etat: 'PLANIFIE'  
       });  
         
-      await nouvellePlanification.save();  
+      await nouvellePlanification.save();
+      // La synchronisation avec la commande se fait automatiquement via le middleware
         
       return res.status(200).json({  
         success: true,  
         message: 'Commande planifiée avec succès',  
-        data: {  
-          planification: nouvellePlanification  
-        }  
+        data: { planification: nouvellePlanification }  
       });  
     }  
       
@@ -698,8 +694,8 @@ const updateCommandStatus = async (req, res) => {
     });  
   }  
 };  
-  
-// ✅ NOUVEAU: Fonction pour annuler une planification    
+
+// ✅ CORRIGÉ: Fonction pour annuler une planification
 const cancelPlanification = async (req, res) => {    
   try {    
     const { id } = req.params;    
@@ -720,7 +716,6 @@ const cancelPlanification = async (req, res) => {
       });    
     }    
     
-    // Vérifier s'il y a une livraison en cours    
     const livraison = await Livraison.findOne({     
       planification_id: planification._id,    
       etat: 'EN_COURS'    
@@ -733,8 +728,10 @@ const cancelPlanification = async (req, res) => {
       });    
     }    
     
-    // Supprimer la planification    
-    await Planification.findByIdAndDelete(planification._id);    
+    // Marquer comme annulée au lieu de supprimer
+    planification.etat = 'ANNULE';
+    await planification.save();
+    // La synchronisation avec la commande se fait automatiquement via le middleware
     
     res.status(200).json({    
       success: true,    
@@ -749,8 +746,8 @@ const cancelPlanification = async (req, res) => {
     });    
   }    
 };    
-  
-// Supprimer une commande    
+
+// Supprimer une commande (reste identique)
 const deleteCommandById = async (req, res) => {    
   try {    
     const { id } = req.params;    
@@ -762,7 +759,6 @@ const deleteCommandById = async (req, res) => {
       });    
     }    
     
-    // Vérifier si la commande existe    
     const commande = await Command.findById(id);    
     if (!commande) {    
       return res.status(404).json({    
@@ -771,22 +767,17 @@ const deleteCommandById = async (req, res) => {
       });    
     }    
     
-    // Supprimer les lignes de commande associées    
     await CommandeLine.deleteMany({ commande_id: id });    
     
-    // Supprimer la planification si elle existe    
-    await Planification.deleteOne({ commande_id: id });    
-  
-    // ✅ AJOUTÉ: Supprimer les livraisons associées  
     const planifications = await Planification.find({ commande_id: id });  
     for (const planif of planifications) {  
       await Livraison.deleteMany({ planification_id: planif._id });  
       await LivraisonLine.deleteMany({   
         livraison_id: { $in: await Livraison.find({ planification_id: planif._id }).distinct('_id') }  
       });  
-    }  
+    }
     
-    // Supprimer la commande    
+    await Planification.deleteMany({ commande_id: id });
     await Command.findByIdAndDelete(id);    
     
     res.status(200).json({    
@@ -802,30 +793,24 @@ const deleteCommandById = async (req, res) => {
     });    
   }    
 };    
-  
-// ✅ CORRIGÉ: Statistiques basées sur les planifications  
+
+// ✅ CORRIGÉ: Statistiques basées sur les statuts de commande
 const getCommandsStats = async (req, res) => {    
   try {    
-    // Statistiques par état de planification  
-    const planificationStats = await Planification.aggregate([    
-      {    
-        $group: {    
-          _id: '$etat',    
-          count: { $sum: 1 }    
-        }    
-      }    
-    ]);    
-  
-    // Commandes sans planification (pending)  
-    const commandsWithPlanification = await Planification.distinct('commande_id');  
-    const commandsPending = await Command.countDocuments({  
-      _id: { $nin: commandsWithPlanification }  
-    });  
-    
-    const totalCommandes = await Command.countDocuments();    
-    const commandesUrgentes = await Command.countDocuments({ urgent: true });    
-  
-    // ✅ AJOUTÉ: Statistiques par priorité  
+    // ✅ NOUVEAU: Statistiques basées sur les statuts de commande
+    const commandeStats = await Command.aggregate([
+      {
+        $group: {
+          _id: '$statut',
+          count: { $sum: 1 }
+        }
+      }  
+    ]);  
+      
+    const totalCommandes = await Command.countDocuments();  
+    const commandesUrgentes = await Command.countDocuments({ urgent: true });  
+      
+    // ✅ NOUVEAU: Statistiques par priorité (garde la logique planification)  
     const priorityStats = await Planification.aggregate([  
       {  
         $group: {  
@@ -834,191 +819,188 @@ const getCommandsStats = async (req, res) => {
         }  
       }  
     ]);  
-    
-    // Statistiques par mois (derniers 6 mois)    
-    const sixMonthsAgo = new Date();    
-    sixMonthsAgo.setMonth(sixMonthsAgo.getMonth() - 6);    
-    
-    const monthlyStats = await Command.aggregate([    
-      {    
-        $match: {    
-          date_commande: { $gte: sixMonthsAgo }    
-        }    
-      },    
-      {    
-        $group: {    
-          _id: {    
-            year: { $year: '$date_commande' },    
-            month: { $month: '$date_commande' }    
-          },    
-          count: { $sum: 1 },    
-          totalAmount: { $sum: '$montant_total' }
-        }    
-      },    
-      {    
-        $sort: { '_id.year': 1, '_id.month': 1 }    
-      }    
-    ]);    
-  
-    // ✅ CORRIGÉ: Transformer les statistiques pour le frontend  
+      
+    // Statistiques par mois (derniers 6 mois)  
+    const sixMonthsAgo = new Date();  
+    sixMonthsAgo.setMonth(sixMonthsAgo.getMonth() - 6);  
+      
+    const monthlyStats = await Command.aggregate([  
+      {  
+        $match: {  
+          date_commande: { $gte: sixMonthsAgo }  
+        }  
+      },  
+      {  
+        $group: {  
+          _id: {  
+            year: { $year: '$date_commande' },  
+            month: { $month: '$date_commande' }  
+          },  
+          count: { $sum: 1 },  
+          totalAmount: { $sum: '$montant_total' }  
+        }  
+      },  
+      {  
+        $sort: { '_id.year': 1, '_id.month': 1 }  
+      }  
+    ]);  
+      
+    // ✅ NOUVEAU: Transformer les statistiques basées sur les statuts de commande  
     const transformedStats = {  
       totalCommandes,  
       commandesUrgentes,  
-      pending: commandsPending,  
+      pending: 0,  
       assigned: 0,  
       inProgress: 0,  
       delivered: 0,  
       cancelled: 0  
     };  
-  
-    // Mapper les états de planification vers les statuts frontend  
-    planificationStats.forEach(stat => {  
+      
+    // ✅ NOUVEAU: Mapper les statuts de commande vers les statuts frontend  
+    commandeStats.forEach(stat => {  
       switch(stat._id) {  
-        case 'PLANIFIE':  
+        case 'CONFIRMEE':  
+          transformedStats.pending = stat.count;  
+          break;  
+        case 'ASSIGNEE':  
           transformedStats.assigned = stat.count;  
           break;  
         case 'EN_COURS':  
           transformedStats.inProgress = stat.count;  
           break;  
-        case 'LIVRE':  
+        case 'LIVREE':  
           transformedStats.delivered = stat.count;  
           break;  
-        case 'ANNULE':  
-          transformedStats.cancelled = stat.count;  
+        case 'ANNULEE':  
+        case 'ECHOUEE':  
+          transformedStats.cancelled += stat.count;  
           break;  
       }  
     });  
-    
-    res.status(200).json({    
-      success: true,    
-      data: {    
-        ...transformedStats,  
-        repartitionParPlanification: planificationStats,  
-        repartitionParPriorite: priorityStats,  
-        statistiquesMensuelles: monthlyStats    
-      }    
-    });    
-  } catch (error) {    
-    console.error('Erreur lors de la récupération des statistiques:', error);    
-    res.status(500).json({    
-      success: false,    
-      message: error.message    
-    });    
-  }    
-};    
-  
-// ✅ CORRIGÉ: Statistiques par client basées sur les planifications  
-const getCommandsStatsByCustomer = async (req, res) => {    
-  try {    
-    const { customerId } = req.params;    
-    
-    if (!customerId || !mongoose.Types.ObjectId.isValid(customerId)) {    
-      return res.status(400).json({    
-        success: false,    
-        message: 'ID client invalide'    
-      });    
-    }    
-  
-    // ✅ CORRIGÉ: Statistiques par état de planification pour ce client  
-    const commandIds = await Command.find({ customer_id: customerId }).distinct('_id');  
       
-    const planificationStatsByCustomer = await Planification.aggregate([  
+    res.status(200).json({  
+      success: true,  
+      data: {  
+        ...transformedStats,  
+        repartitionParPriorite: priorityStats,  
+        statistiquesMensuelles: monthlyStats  
+      }  
+    });  
+      
+  } catch (error) {  
+    console.error('Erreur lors de la récupération des statistiques:', error);  
+    res.status(500).json({  
+      success: false,  
+      message: error.message  
+    });  
+  }  
+};  
+  
+// ✅ CORRIGÉ: Statistiques par client basées sur les statuts de commande  
+const getCommandsStatsByCustomer = async (req, res) => {  
+  try {  
+    const { customerId } = req.params;  
+      
+    if (!customerId || !mongoose.Types.ObjectId.isValid(customerId)) {  
+      return res.status(400).json({  
+        success: false,  
+        message: 'ID client invalide'  
+      });  
+    }  
+      
+    // ✅ NOUVEAU: Statistiques basées sur les statuts de commande pour ce client  
+    const commandeStatsByCustomer = await Command.aggregate([  
       {  
-        $match: { commande_id: { $in: commandIds } }  
+        $match: { customer_id: new mongoose.Types.ObjectId(customerId) }  
       },  
       {  
         $group: {  
-          _id: '$etat',  
+          _id: '$statut',  
           count: { $sum: 1 }  
         }  
       }  
     ]);  
-  
-    // Commandes sans planification pour ce client  
-    const commandsWithPlanification = await Planification.find({  
-      commande_id: { $in: commandIds }  
-    }).distinct('commande_id');  
       
-    const commandsPendingByCustomer = commandIds.filter(  
-      id => !commandsWithPlanification.includes(id.toString())  
-    ).length;  
-    
-    const totalCommandes = await Command.countDocuments({ customer_id: customerId });    
-    const commandesUrgentes = await Command.countDocuments({    
-      customer_id: customerId,    
-      urgent: true    
-    });    
-    
-    // Montant total des commandes    
-    const montantTotal = await Command.aggregate([    
-      {    
-        $match: { customer_id: new mongoose.Types.ObjectId(customerId) }    
-      },    
-      {    
-        $group: {    
-          _id: null,    
-          total: { $sum: '$montant_total' }    
-        }    
-      }    
-    ]);    
-  
-    // ✅ CORRIGÉ: Transformer les statistiques pour le frontend  
+    const totalCommandes = await Command.countDocuments({ customer_id: customerId });  
+    const commandesUrgentes = await Command.countDocuments({  
+      customer_id: customerId,  
+      urgent: true  
+    });  
+      
+    // Montant total des commandes  
+    const montantTotal = await Command.aggregate([  
+      {  
+        $match: { customer_id: new mongoose.Types.ObjectId(customerId) }  
+      },  
+      {  
+        $group: {  
+          _id: null,  
+          total: { $sum: '$montant_total' }  
+        }  
+      }  
+    ]);  
+      
+    // ✅ NOUVEAU: Transformer les statistiques pour le frontend  
     const transformedStatsByCustomer = {  
       totalCommandes,  
       commandesUrgentes,  
       montantTotal: montantTotal[0]?.total || 0,  
-      pending: commandsPendingByCustomer,  
+      pending: 0,  
       assigned: 0,  
       inProgress: 0,  
       delivered: 0,  
       cancelled: 0  
     };  
-  
-    // Mapper les états de planification  
-    planificationStatsByCustomer.forEach(stat => {  
+      
+    // ✅ NOUVEAU: Mapper les statuts de commande  
+    commandeStatsByCustomer.forEach(stat => {  
       switch(stat._id) {  
-        case 'PLANIFIE':  
+        case 'CONFIRMEE':  
+          transformedStatsByCustomer.pending = stat.count;  
+          break;  
+        case 'ASSIGNEE':  
           transformedStatsByCustomer.assigned = stat.count;  
           break;  
         case 'EN_COURS':  
           transformedStatsByCustomer.inProgress = stat.count;  
           break;  
-        case 'LIVRE':  
+        case 'LIVREE':  
           transformedStatsByCustomer.delivered = stat.count;  
           break;  
-        case 'ANNULE':  
-          transformedStatsByCustomer.cancelled = stat.count;  
+        case 'ANNULEE':  
+        case 'ECHOUEE':  
+          transformedStatsByCustomer.cancelled += stat.count;  
           break;  
       }  
     });  
-    
-    res.status(200).json({    
-      success: true,    
+      
+    res.status(200).json({  
+      success: true,  
       data: {  
         ...transformedStatsByCustomer,  
-        repartitionParPlanification: planificationStatsByCustomer  
+        repartitionParStatut: commandeStatsByCustomer  
       }  
-    });    
-    
-  } catch (error) {    
-    console.error('Erreur lors de la récupération des statistiques client:', error);    
-    res.status(500).json({    
-      success: false,    
-      message: error.message    
-    });    
-  }    
-};    
+    });  
+      
+  } catch (error) {  
+    console.error('Erreur lors de la récupération des statistiques client:', error);  
+    res.status(500).json({  
+      success: false,  
+      message: error.message  
+    });  
+  }  
+};  
   
-module.exports = {      
-  getCommands,      
-  getCommandById,      
-  getCommandsByCustomerId,      
-  createCommand,      
-  updateCommandById,      
+module.exports = {  
+  getCommands,  
+  getCommandById,  
+  getCommandsByCustomerId,  
+  createCommand,  
+  updateCommandById,  
   updateCommandStatus,  
-  cancelPlanification,     
-  cancelOrder,      
-  deleteCommandById,      
-  getCommandsStats,      
-  getCommandsStatsByCustomer      
+  cancelPlanification,  
+  cancelOrder,  
+  deleteCommandById,  
+  getCommandsStats,  
+  getCommandsStatsByCustomer  
 };
