@@ -82,26 +82,12 @@ const register = async (req, res) => {
       email,    
       password_hash,    
       role_id: role._id,    
-      statut: (role_code === 'ADMIN' || role_code === 'EMPLOYE' || role_code === 'EMPLOYE_MAGASIN') ? 'ACTIF' : 'EN_ATTENTE',  
-      email_verified: (role_code === 'ADMIN' || role_code === 'EMPLOYE' || role_code === 'EMPLOYE_MAGASIN') ? true : false  
+      statut: 'ACTIF',    
+      email_verified: true  
     });        
     
     // Générer un code de vérification
-    if (role_code === 'CLIENT') {  
-      const verificationCode = crypto.randomInt(100000, 999999).toString();    
-      const verificationExpires = new Date(Date.now() + 15 * 60 * 1000);  
-      
-      newUser.verification_code = verificationCode;    
-      newUser.verification_code_expires = verificationExpires;   
-      
-      await newUser.save();  
-        
-      // Envoyer l'email de vérification seulement aux clients  
-      await sendVerificationEmail(email, verificationCode);  
-    } else {  
-      // Pour admin et employés, sauvegarder directement sans code de vérification  
-      await newUser.save();  
-    }
+    await newUser.save();
       
     let responseData = {        
       user: {        
@@ -158,7 +144,7 @@ const register = async (req, res) => {
           customer_code,        
           type_client: 'PHYSIQUE',        
           physical_user_id: physicalUser._id,
-          statut: 'EN_ATTENTE'      
+          statut: 'ACTIF'      
         });        
         await customer.save();        
         responseData.customer = customer;        
@@ -253,21 +239,18 @@ const register = async (req, res) => {
           customer_code,        
           type_client: 'MORAL',        
           moral_user_id: moralUser._id,
-          statut: 'EN_ATTENTE' 
+          statut: 'ACTIF' 
         });        
         await customer.save();        
         responseData.customer = customer;        
       }        
     }        
       
-    res.status(201).json({          
-      success: true,          
-      message: (role_code === 'CLIENT') ?   
-        'Compte créé avec succès. Vérifiez votre email pour l\'activer.' :   
-        'Utilisateur créé avec succès',  
-      requiresVerification: (role_code === 'CLIENT'),  
-      email: (role_code === 'CLIENT') ? email : undefined,  
-      data: responseData          
+   res.status(201).json({            
+      success: true,            
+      message: 'Utilisateur créé avec succès',  // ✅ Message unifié  
+      requiresVerification: false,  // ✅ Toujours false maintenant  
+      data: responseData            
     });
        
   } catch (error) {        
@@ -319,7 +302,7 @@ const login = async (req, res) => {
       return res.status(401).json({
         success: false,
         message: 'Compte en attente de vérification. Vérifiez votre email.',
-        requiresVerification: true,
+        requiresVerification: false,
         email: user.email
       });
     }
