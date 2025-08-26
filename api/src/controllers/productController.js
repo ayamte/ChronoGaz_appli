@@ -1,6 +1,7 @@
 const Product = require('../models/Product');  
 const multer = require('multer');  
-const path = require('path');  
+const path = require('path'); 
+const mongoose = require('mongoose'); 
   
 // Configuration multer pour l'upload d'images  
 const storage = multer.memoryStorage();  
@@ -83,19 +84,33 @@ exports.getProductById = async (req, res) => {
 // Créer un nouveau produit  
 exports.createProduct = async (req, res) => {  
   try {  
+    const parsedUnitesMesure = JSON.parse(req.body.unites_mesure);
+
+    const validatedUnitesMesure = parsedUnitesMesure.map(unite => ({
+      UM_id: new mongoose.Types.ObjectId(unite.UM_id),
+      is_principal: unite.is_principal
+  }));
+    console.log('=== DEBUG BACKEND ===');
+    console.log('req.body:', req.body);
+    console.log('req.file:', req.file);
+    console.log('===================');
     const productData = {  
       ref: req.body.ref,  
       short_name: req.body.short_name,  
       long_name: req.body.long_name,  
       gamme: req.body.gamme,  
       brand: req.body.brand,  
-      description: req.body.description  
+      description: req.body.description,
+      unites_mesure: validatedUnitesMesure
+ 
     };  
   
     // Ajouter l'image si fournie  
     if (req.file) {  
       productData.image = req.file.buffer;  
     }  
+    console.log('productData avant création:', productData);
+
   
     const product = await Product.create(productData);  
       
@@ -103,7 +118,13 @@ exports.createProduct = async (req, res) => {
       success: true,  
       data: product  
     });  
-  } catch (error) {  
+  } catch (error) { 
+    console.error('=== ERREUR DÉTAILLÉE ===');
+    console.error('Error name:', error.name);
+    console.error('Error message:', error.message);
+    console.error('Error details:', error);
+    console.error('Validation errors:', error.errors);
+    console.error('========================'); 
     if (error.code === 11000) {  
       return res.status(400).json({  
         success: false,  

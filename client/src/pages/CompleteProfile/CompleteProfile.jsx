@@ -51,7 +51,7 @@ const CompleteProfile = ({ googleProfile }) => {
     setError("");  
   
     try {  
-      const response = await fetch(`${process.env.REACT_APP_API_URL || 'http://localhost:5000'}/api/auth/complete-profile`, {  
+      const response = await fetch(`${process.env.REACT_APP_API_URL || 'http://localhost:5001'}/api/auth/complete-profile`, {  
         method: "POST",  
         headers: {  
           "Content-Type": "application/json",  

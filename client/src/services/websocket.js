@@ -12,7 +12,7 @@ class WebSocketService {
     this.lastIdentifyPayload = null;  
   }  
   
-  connect(serverUrl = 'http://localhost:5000') {  
+  connect(serverUrl = 'http://localhost:5001') {  
     try {  
       this.socket = io(serverUrl, {  
         autoConnect: true,  

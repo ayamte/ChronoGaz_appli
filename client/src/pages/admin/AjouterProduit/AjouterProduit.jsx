@@ -133,7 +133,20 @@ export default function AjouterProduit() {
     if (fileInput) {      
       fileInput.value = ""      
     }      
-  }  
+  }
+  
+  const debugFormData = () => {
+    console.log('=== DEBUG FORM DATA ===');
+    console.log('ref:', formData.ref);
+    console.log('short_name:', formData.short_name);
+    console.log('long_name:', formData.long_name);
+    console.log('gamme:', formData.gamme);
+    console.log('brand:', formData.brand);
+    console.log('description:', formData.description);
+    console.log('image:', formData.image);
+    console.log('unites_mesure:', formData.unites_mesure);
+    console.log('========================');
+  };
   
   // Gestion des unités de mesure  
   const addUnite = () => {  
@@ -160,7 +173,8 @@ export default function AjouterProduit() {
   }  
       
   const handleSubmit = async (e) => {    
-    e.preventDefault()    
+    e.preventDefault() 
+    debugFormData()   
       
     const validationErrors = validateForm()    
     if (Object.keys(validationErrors).length > 0) {    
@@ -178,7 +192,10 @@ export default function AjouterProduit() {
         gamme: formData.gamme,  
         brand: formData.brand,  
         description: formData.description,  
-        image: formData.image  
+        image: formData.image,  
+        unites_mesure: formData.unites_mesure
+
+
       })  
   
       const productId = productResponse.data._id  
@@ -206,7 +223,10 @@ export default function AjouterProduit() {
         setShowSuccess(false)    
       }, 3000)    
     } catch (error) {    
-      console.error("Erreur lors de l'ajout du produit:", error)    
+      console.error("Erreur lors de l'ajout du produit:", error)  
+      console.log("Détail de l'erreur serveur:", error.response?.data)
+console.log("Status:", error.response?.status)
+console.log("Headers de réponse:", error.response?.headers)  
       setErrors({ ref: "Erreur lors de l'ajout du produit. Veuillez réessayer." })    
     } finally {    
       setLoading(false)    

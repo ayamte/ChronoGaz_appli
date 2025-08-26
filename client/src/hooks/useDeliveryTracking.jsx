@@ -2,8 +2,9 @@ import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { deliveryService } from '../services/api';  
 import { useWebSocket } from './useWebSocket';  
   
-const GRAPHHOPPER_API_KEY = '6fe731b8-5611-4fb5-afa2-da5059ae2564';  
-  
+const GRAPHHOPPER_API_KEY = process.env.REACT_APP_GRAPHHOPPER_KEY;  
+console.log('GraphHopper Key:', GRAPHHOPPER_API_KEY);
+
 export const useDeliveryTracking = (deliveryId, options = {}) => {  
   const {  
     enabled = true,  
@@ -36,7 +37,7 @@ export const useDeliveryTracking = (deliveryId, options = {}) => {
     if (!pos1 || !pos2) return true;  
     const deltaLat = Math.abs(pos1.lat - pos2.lat);  
     const deltaLng = Math.abs(pos1.lng - pos2.lng);  
-    return deltaLat > 0.0005 || deltaLng > 0.0005; // Seuil plus élevé  
+    return deltaLat > 0.001 || deltaLng > 0.001; // Seuil réduit pour plus de réactivité  
   }, []);  
   
   // Vérifie si les positions ont réellement changé  
@@ -44,10 +45,10 @@ export const useDeliveryTracking = (deliveryId, options = {}) => {
     if (!oldDriver || !oldDest || !newDriver || !newDest) return true;  
       
     return (  
-      Math.abs(oldDriver.lat - newDriver.lat) > 0.00001 ||  
-      Math.abs(oldDriver.lng - newDriver.lng) > 0.00001 ||  
-      Math.abs(oldDest.lat - newDest.lat) > 0.00001 ||  
-      Math.abs(oldDest.lng - newDest.lng) > 0.00001  
+      Math.abs(oldDriver.lat - newDriver.lat) > 0.0001 ||  
+      Math.abs(oldDriver.lng - newDriver.lng) > 0.0001 ||  
+      Math.abs(oldDest.lat - newDest.lat) > 0.0001 ||  
+      Math.abs(oldDest.lng - newDest.lng) > 0.0001  
     );  
   }, []);  
   
@@ -58,26 +59,15 @@ export const useDeliveryTracking = (deliveryId, options = {}) => {
       return;  
     }  
   
-    // Vérifier si on a déjà calculé pour ces positions récemment  
-    const currentPositions = `${start.lat},${start.lng}-${end.lat},${end.lng}`;  
-    const now = Date.now();  
-      
-    if (lastRouteCalculationRef.current &&   
-        lastRouteCalculationRef.current.positions === currentPositions &&  
-        (now - lastRouteCalculationRef.current.timestamp) < 30000) { // 30 secondes minimum  
-      console.log('🚫 Route déjà calculée récemment, on skip');  
-      return;  
-    }  
-  
     // Annuler toute requête en attente  
     if (routeCalculationTimeoutRef.current) {  
       clearTimeout(routeCalculationTimeoutRef.current);  
     }  
   
-    // Debounce de 2 secondes  
+    // Debounce réduit à 500ms pour plus de réactivité
     routeCalculationTimeoutRef.current = setTimeout(async () => {  
       try {  
-        console.log('🔄 Calcul de la route...');  
+        console.log('🔄 Calcul de la route...', { start, end });  
         const url = `https://graphhopper.com/api/1/route?point=${start.lat},${start.lng}&point=${end.lat},${end.lng}&vehicle=car&locale=fr&calc_points=true&key=${GRAPHHOPPER_API_KEY}`;  
           
         const response = await fetch(url);  
@@ -94,24 +84,25 @@ export const useDeliveryTracking = (deliveryId, options = {}) => {
   
         if (data.paths && data.paths.length > 0) {  
           const route = data.paths[0];  
-          setRouteInfo({  
+          const newRouteInfo = {  
             distance: (route.distance / 1000).toFixed(1),  
             duration: Math.round(route.time / 60000),  
             geometry: route.points  
-          });  
+          };
+          
+          setRouteInfo(newRouteInfo);  
   
-          // Marquer cette position comme calculée  
+          // ✅ CORRECTION : Simplifier la sauvegarde - juste pour éviter les requêtes simultanées
           lastRouteCalculationRef.current = {  
-            positions: currentPositions,  
-            timestamp: now  
+            timestamp: Date.now()
           };  
   
-          console.log('✅ Route calculée avec succès');  
+          console.log('✅ Route calculée avec succès', newRouteInfo);  
         }  
       } catch (err) {  
         console.error('❌ Erreur calcul route:', err);  
       }  
-    }, 2000);  
+    }, 500); // Réduit à 500ms
   }, []);  
   
   const fetchDeliveryData = useCallback(async () => {  
@@ -144,8 +135,11 @@ export const useDeliveryTracking = (deliveryId, options = {}) => {
           return data;  
         });  
   
-        // Mettre à jour les positions seulement si elles ont changé  
-        if (newDriverPos && hasMovedSignificantly(lastDriverPositionRef.current, newDriverPos)) {  
+        // ✅ CORRECTION : Toujours mettre à jour la position si elle a changé
+        if (newDriverPos && 
+            (!lastDriverPositionRef.current || 
+             hasMovedSignificantly(lastDriverPositionRef.current, newDriverPos))) {  
+          console.log('📍 Nouvelle position du livreur:', newDriverPos);
           setDriverPosition(newDriverPos);  
           lastDriverPositionRef.current = newDriverPos;  
           memoizedOnPositionUpdate(newDriverPos);  
@@ -182,26 +176,19 @@ export const useDeliveryTracking = (deliveryId, options = {}) => {
     }  
   }, [deliveryId, enabled, fetchDeliveryData]);  
   
-  // Calcul de route avec debounce et vérification des changements  
+  // ✅ CORRECTION : Calcul de route simplifié - TOUJOURS recalculer quand les positions changent
   useEffect(() => {  
     if (!driverPosition || !destinationPosition) {  
       return;  
     }  
   
-    // Vérifier si les positions ont réellement changé  
-    const shouldRecalculate = !lastRouteCalculationRef.current ||   
-      positionsHaveChanged(  
-        lastRouteCalculationRef.current.driverPos,  
-        lastRouteCalculationRef.current.destPos,  
-        driverPosition,  
-        destinationPosition  
-      );  
-  
-    if (shouldRecalculate) {  
-      console.log('📍 Positions changées, recalcul de la route');  
-      calculateRouteInfo(driverPosition, destinationPosition);  
-    }  
-  }, [driverPosition, destinationPosition, calculateRouteInfo, positionsHaveChanged]);  
+    console.log('📍 Positions mises à jour, calcul de la route:', { 
+      driver: driverPosition, 
+      dest: destinationPosition 
+    });
+    
+    calculateRouteInfo(driverPosition, destinationPosition);  
+  }, [driverPosition, destinationPosition, calculateRouteInfo]);  
   
   // Polling (seulement si WebSocket inactif)  
   useEffect(() => {  

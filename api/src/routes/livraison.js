@@ -4,7 +4,8 @@ const {
   completeLivraison,  
   getLivraisons,  
   getLivraisonById,  
-  updateLivraisonLines  
+  updateLivraisonLines,
+  getLivraisonTracking  
 } = require('../controllers/livraisonController');  
 const { authenticateToken } = require('../middleware/authMiddleware');  
 const { requireAdmin } = require('../middleware/adminAuthMiddleware');  
@@ -19,5 +20,7 @@ router.get('/:id', authenticateToken, getLivraisonById);
 router.post('/start/:planificationId', authenticateToken, startLivraison);  
 router.put('/:id/complete', authenticateToken, completeLivraison);  
 router.put('/:id/lines', authenticateToken, updateLivraisonLines);  
+router.get('/:id/track', authenticateToken, getLivraisonTracking);
+
   
 module.exports = router;

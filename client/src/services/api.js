@@ -1,7 +1,7 @@
 import axios from 'axios';  
   
 // Configuration de base pour l'API  
-const API_BASE_URL = `${process.env.REACT_APP_API_URL || 'http://localhost:5000'}/api`;  
+const API_BASE_URL = `${process.env.REACT_APP_API_URL || 'http://localhost:5001'}/api`;  
   
 // Instance axios configurée  
 const api = axios.create({    
@@ -50,7 +50,7 @@ export const deliveryService = {
   getDeliveryById: (id) => api.get(`/deliveries/${id}`),  
     
   // Obtenir les données de suivi GPS (utilisé par useDeliveryTracking)  
-  getDeliveryTracking: (id) => api.get(`/deliveries/${id}/track`),  
+  getDeliveryTracking: (id) => api.get(`/livraisons/${id}/track`),  
     
   // Obtenir la position en temps réel  
   getRealTimePosition: (id) => api.get(`/deliveries/${id}/realtime-position`),  

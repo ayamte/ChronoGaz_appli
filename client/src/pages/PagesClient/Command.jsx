@@ -10,7 +10,7 @@ import listePrixService from '../../services/listePrixService';
 import { createOrderFromSteps } from '../../services/orderService';        
 import './Command.css'; 
           
-const API_BASE_URL = process.env.REACT_APP_API_URL || 'http://localhost:5000';        
+const API_BASE_URL = process.env.REACT_APP_API_URL || 'http://localhost:5001';        
         
 const Command = () => {        
   const [currentStep, setCurrentStep] = useState(1);        
@@ -78,14 +78,18 @@ const Command = () => {
       setLoading(true);          
               
       // Charger les produits actifs        
-      const productsResponse = await productService.getAllProducts({ actif: true });          
+      const productsResponse = await productService.getAllProducts({ actif: true }); 
+      console.log('Réponse produits:', productsResponse); // Affichez la réponse de l'API
+         
                 
       if (productsResponse.success && productsResponse.data) {          
         const allProducts = productsResponse.data;          
                   
         // Charger les prix depuis les listes de prix actives        
         try {        
-          const pricesResponse = await listePrixService.getActivePrices();        
+          const pricesResponse = await listePrixService.getActivePrices();  
+          console.log('Réponse prix:', pricesResponse); // Affichez la réponse de l'API
+      
           const pricesMap = {};        
           const productsWithPrices = [];        
                   
@@ -101,7 +105,8 @@ const Command = () => {
                 productsWithPrices.push(product);        
               }        
             });        
-                    
+            console.log('Produits avec prix trouvés:', productsWithPrices);
+
             setProducts(productsWithPrices);        
             setPrices(pricesMap);        
           } else {        
