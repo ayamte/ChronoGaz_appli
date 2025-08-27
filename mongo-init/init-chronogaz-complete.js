@@ -92,20 +92,24 @@ db.createCollection('customers', {
 });  
   
 // Collection Employes  
-db.createCollection('employes', {  
-  validator: {  
-    $jsonSchema: {  
-      bsonType: 'object',  
-      required: ['physical_user_id', 'matricule', 'fonction', 'date_embauche'],  
-      properties: {  
-        physical_user_id: { bsonType: 'objectId' },  
-        matricule: { bsonType: 'string' },  
-        fonction: { enum: ['CHAUFFEUR', 'ACCOMPAGNANT', 'MAGASINIER', 'MANAGER', 'COMMERCIAL'] },
-        depot_id: { bsonType: 'objectId' }  
-      }  
-    }  
-  }  
-});  
+db.createCollection('employes', {    
+  validator: {    
+    $jsonSchema: {    
+      bsonType: 'object',    
+      required: ['physical_user_id', 'matricule', 'fonction', 'date_embauche', 'cin', 'cnss'], // ✅ Ajouter cin et cnss  
+      properties: {    
+        physical_user_id: { bsonType: 'objectId' },    
+        matricule: { bsonType: 'string' },    
+        cin: { bsonType: 'string' }, // ✅ Ajouter  
+        cnss: { bsonType: 'string' }, // ✅ Ajouter  
+        fonction: { enum: ['CHAUFFEUR', 'ACCOMPAGNANT', 'MAGASINIER'] }, // ✅ Synchroniser avec le modèle  
+        date_embauche: { bsonType: 'date' },  
+        statut: { enum: ['ACTIF', 'INACTIF', 'SUSPENDU', 'EN_CONGE'] },  
+        depot_id: { bsonType: ['objectId', 'null'] } // ✅ Permettre null  
+      }    
+    }    
+  }    
+});
   
 // Collection Products  
 db.createCollection('products', {    

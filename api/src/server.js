@@ -97,31 +97,33 @@ app.use((req, res, next) => {
 setupWebSocket(io);
 
 // Routes principales avec les nouveaux routers améliorés
-app.use('/api/auth', authRoutes);    
-app.use('/api/users', usersRouter);   
-app.use('/api/addresses', addressRoutes);
-app.use('/api/customer', customerRoutes);
-app.use('/api/locations', locationRoutes);
-app.use("/api/commands", commandRoutes);
-app.use('/api/livraisons', livraisonRoutes);
-app.use('/api/planifications', planificationRoutes);
-app.use('/api/evaluations', evaluationRoutes);
-
-// Routes métier existantes
-app.use('/api/listeprix', listePrixRoutes);
-app.use('/api/depots', depotsRoutes);  
-app.use('/api/stock', stockRoutes);  
-app.use('/api/trucks', trucksRoutes); 
-app.use('/api/reports', reportsRoutes);
-app.use('/api/stock-depots', stockDepotRoutes);  
-app.use('/api/stock-lines', stockLineRoutes);
-app.use('/api/products', productRoutes);  
-app.use('/api/ums', umRoutes);
-app.use('/api/admin', adminRoutes);  
-
-app.use('/api/fournisseurs', fournisseurRoutes);  
-app.use('/api/bl-frs', blFrsRoutes);  
-app.use('/api/depot-entry-lines', depotEntryLineRoutes);
+app.use('/api/auth', authRoutes);      
+app.use('/api/users', usersRouter);     
+app.use('/api/addresses', addressRoutes);  
+app.use('/api/customer', customerRoutes);  
+app.use('/api/locations', locationRoutes);  
+app.use("/api/commands", commandRoutes);  
+app.use('/api/livraisons', livraisonRoutes);  
+app.use('/api/planifications', planificationRoutes);  
+app.use('/api/evaluations', evaluationRoutes);  
+  
+// Routes métier existantes  
+app.use('/api/listeprix', listePrixRoutes);  
+app.use('/api/depots', depotsRoutes);    
+app.use('/api/stock', stockRoutes);    
+app.use('/api/trucks', trucksRoutes);   
+app.use('/api/reports', reportsRoutes);  
+app.use('/api/stock-depots', stockDepotRoutes);    
+app.use('/api/stock-lines', stockLineRoutes);  
+app.use('/api/products', productRoutes);    
+app.use('/api/ums', umRoutes);  
+  
+app.use('/api/fournisseurs', fournisseurRoutes);    
+app.use('/api/bl-frs', blFrsRoutes);    
+app.use('/api/depot-entry-lines', depotEntryLineRoutes);  
+  
+// IMPORTANT: Déplacer les routes admin APRÈS les routes inline  
+app.use('/api/admin', adminRoutes);
 
 // Initialisation Passport
 app.use(passport.initialize());  
@@ -765,78 +767,183 @@ app.get('/api/employees/:id', authenticateToken, async (req, res) => {
 });          
           
 // POST - Créer un nouvel employé          
-app.post('/api/employees', authenticateToken, async (req, res) => {              
-  try {              
-    const { profile, fonction, statut } = req.body;              
-                  
-    // Déterminer le rôle selon la fonction            
-    let roleCode = 'EMPLOYE'; // Par défaut pour chauffeurs et accompagnants              
-    if (fonction === 'MAGASINIER') {              
-      roleCode = 'EMPLOYE_MAGASIN';              
-    }              
-                  
-    const roleEmploye = await Role.findOne({ code: roleCode });              
-    if (!roleEmploye) {              
-      return res.status(400).json({ success: false, message: `Rôle ${roleCode} non trouvé` });              
-    }              
-              
-    const bcrypt = require('bcrypt');              
+app.post('/api/employees', authenticateToken, async (req, res) => {                
+  try {                
+    console.log('🔍 === DÉBUT CRÉATION EMPLOYÉ ===');  
+    console.log('📥 Body reçu:', JSON.stringify(req.body, null, 2));  
+      
+    const { profile, fonction, statut } = req.body;                
+      
+    console.log('📋 Données extraites:');  
+    console.log('  - profile:', profile);  
+    console.log('  - fonction:', fonction);  
+    console.log('  - statut:', statut);  
+      
+    // Validation CIN/CNSS avec logs détaillés  
+    console.log('🔍 Validation CIN/CNSS:');  
+    console.log('  - profile.cin:', profile?.cin);  
+    console.log('  - profile.cnss:', profile?.cnss);  
+    console.log('  - Type profile.cin:', typeof profile?.cin);  
+    console.log('  - Type profile.cnss:', typeof profile?.cnss);  
+      
+    if (!profile?.cin || !profile?.cnss) {    
+      console.log('❌ Validation échouée: CIN ou CNSS manquant');  
+      return res.status(400).json({     
+        success: false,     
+        message: 'CIN et CNSS sont obligatoires pour un employé'     
+      });    
+    }  
+      
+    console.log('✅ Validation CIN/CNSS réussie');  
+                    
+    // Déterminer le rôle selon la fonction              
+    let roleCode = 'EMPLOYE';                
+    if (fonction === 'MAGASINIER') {                
+      roleCode = 'EMPLOYE_MAGASIN';                
+    }                
+      
+    console.log('🎭 Rôle déterminé:', roleCode);  
+                    
+    const roleEmploye = await Role.findOne({ code: roleCode });                
+    if (!roleEmploye) {                
+      console.log('❌ Rôle non trouvé:', roleCode);  
+      return res.status(400).json({ success: false, message: `Rôle ${roleCode} non trouvé` });                
+    }                
+      
+    console.log('✅ Rôle trouvé:', roleEmploye);  
                 
-    const defaultPassword = 'ChronoGaz2024';              
-    const saltRounds = 10;              
-    const hashedPassword = await bcrypt.hash(defaultPassword, saltRounds);              
-                  
-    const newUser = new User({                  
-      email: profile.email,                  
-      password_hash: hashedPassword,                  
-      role_id: roleEmploye._id,            
-      password_temporary: true,            
-      first_login: true,  
-      statut: 'ACTIF',        
-      email_verified: true      
-    });          
-    const savedUser = await newUser.save();            
-            
-    // Créer l'utilisateur physique SANS région            
-    const physicalUser = new PhysicalUser({      
-      user_id: savedUser._id,      
-      first_name: profile.first_name,      
-      last_name: profile.last_name,      
-      civilite: profile.civilite || 'M',      
-      telephone_principal: profile.telephone_principal,      
-      city_id: profile.city_id || null,    
-      adresse_principale: profile.adresse_principale      
-    });               
-    const savedPhysical = await physicalUser.save();            
-            
-    // Créer l'employé avec tous les champs            
-    const employee = new Employe({                
-      physical_user_id: savedPhysical._id,                
-      matricule: `EMP${(Date.now()).toString().padStart(6, '0')}`,            
-      cin: profile.cin,              
-      cnss: profile.cnss,            
-      fonction,                
-      date_embauche: new Date(),                
-      statut: statut || 'ACTIF',  
-      depot_id: req.body.depot_id || null // Ajouter cette ligne  
-    });       
-            
-    const savedEmployee = await employee.save();            
-    const populatedEmployee = await Employe.findById(savedEmployee._id)            
-      .populate({    
-        path: 'physical_user_id',              
-        populate: {      
-          path: 'user_id',   
-          select: 'email'  
-        }        
-      });              
+    const bcrypt = require('bcrypt');                
+    const defaultPassword = 'ChronoGaz2024';                
+    const saltRounds = 10;                
+    const hashedPassword = await bcrypt.hash(defaultPassword, saltRounds);                
+      
+    console.log('🔐 Mot de passe hashé généré');  
+                    
+    const newUser = new User({                    
+      email: profile.email,                    
+      password_hash: hashedPassword,                    
+      role_id: roleEmploye._id,              
+      password_temporary: true,              
+      first_login: true,    
+      statut: 'ACTIF',          
+      email_verified: true        
+    });            
+      
+    console.log('👤 Objet User créé:', {  
+      email: newUser.email,  
+      role_id: newUser.role_id,  
+      statut: newUser.statut  
+    });  
+      
+    const savedUser = await newUser.save();              
+    console.log('✅ User sauvegardé avec ID:', savedUser._id);  
               
-    res.json({ success: true, data: populatedEmployee });              
-  } catch (error) {              
-    console.error('Erreur création employé:', error);              
-    res.status(400).json({ success: false, message: error.message });              
-  }              
-});            
+    // Créer l'utilisateur physique              
+    const physicalUserData = {        
+      user_id: savedUser._id,        
+      first_name: profile.first_name,        
+      last_name: profile.last_name,        
+      civilite: profile.civilite || 'M',        
+      telephone_principal: profile.telephone_principal,        
+      city_id: profile.city_id || null,      
+      adresse_principale: profile.adresse_principale        
+    };  
+      
+    console.log('👥 Données PhysicalUser:', physicalUserData);  
+      
+    const physicalUser = new PhysicalUser(physicalUserData);                 
+    const savedPhysical = await physicalUser.save();              
+    console.log('✅ PhysicalUser sauvegardé avec ID:', savedPhysical._id);  
+              
+    // Créer l'employé avec tous les champs              
+    const employeeData = {                  
+      physical_user_id: savedPhysical._id,                  
+      matricule: `EMP${(Date.now()).toString().padStart(6, '0')}`,              
+      cin: profile.cin,                
+      cnss: profile.cnss,              
+      fonction,                  
+      date_embauche: new Date(),                  
+      statut: statut || 'ACTIF',    
+      depot_id: req.body.depot_id || null  
+    };         
+      
+    console.log('👷 Données Employe à sauvegarder:', employeeData);  
+    console.log('🔍 Validation des champs requis pour Employe:');  
+    console.log('  - physical_user_id:', employeeData.physical_user_id);  
+    console.log('  - matricule:', employeeData.matricule);  
+    console.log('  - cin:', employeeData.cin);  
+    console.log('  - cnss:', employeeData.cnss);  
+    console.log('  - fonction:', employeeData.fonction);  
+    console.log('  - date_embauche:', employeeData.date_embauche);  
+      
+    const employee = new Employe(employeeData);  
+      
+    console.log('📝 Tentative de sauvegarde Employe...');  
+    const savedEmployee = await employee.save();              
+    console.log('✅ Employe sauvegardé avec ID:', savedEmployee._id);  
+      
+    const populatedEmployee = await Employe.findById(savedEmployee._id)              
+      .populate({      
+        path: 'physical_user_id',                
+        populate: {        
+          path: 'user_id',     
+          select: 'email'    
+        }          
+      });                
+      
+    console.log('✅ === CRÉATION EMPLOYÉ RÉUSSIE ===');  
+    res.json({ success: true, data: populatedEmployee });                
+  } catch (error) {                
+    console.error('❌ === ERREUR CRÉATION EMPLOYÉ ===');  
+    console.error('Type d\'erreur:', error.constructor.name);  
+    console.error('Message:', error.message);  
+    console.error('Code d\'erreur:', error.code);  
+    console.error('Stack:', error.stack);  
+      
+    // Logs spécifiques pour les erreurs MongoDB  
+    if (error.name === 'MongoServerError' && error.code === 121) {  
+      console.error('🔍 Détails validation MongoDB:');  
+      console.error('  - errInfo:', error.errInfo);  
+      console.error('  - details:', error.errInfo?.details);  
+    }  
+      
+    // Logs spécifiques pour les erreurs Mongoose  
+    if (error.name === 'ValidationError') {  
+      console.error('🔍 Erreurs de validation Mongoose:');  
+      Object.keys(error.errors).forEach(field => {  
+        console.error(`  - ${field}:`, error.errors[field].message);  
+      });  
+    }  
+      
+    res.status(400).json({ success: false, message: error.message });                
+  }                
+});
+
+app.get('/api/debug/employes-validator', async (req, res) => {    
+  try {    
+    const db = mongoose.connection.db;    
+    const collections = await db.listCollections({ name: 'employes' }).toArray();    
+        
+    if (collections.length > 0) {    
+      // Supprimer l'appel à stats() qui cause l'erreur  
+      res.json({    
+        success: true,    
+        validator: collections[0].options?.validator,  
+        collectionInfo: collections[0]  
+      });    
+    } else {    
+      res.json({    
+        success: false,    
+        message: 'Collection employes non trouvée'    
+      });    
+    }    
+  } catch (error) {    
+    res.status(500).json({    
+      success: false,    
+      error: error.message    
+    });    
+  }    
+});
             
 // PUT - Mettre à jour un employé            
 app.put('/api/employees/:id', authenticateToken, async (req, res) => {                
