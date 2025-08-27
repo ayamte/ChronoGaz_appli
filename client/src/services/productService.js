@@ -43,6 +43,10 @@ const productService = {
       if (productData.image) {    
         formData.append('image', productData.image);    
       }    
+
+      if (productData.unites_mesure) {
+        formData.append('unites_mesure', JSON.stringify(productData.unites_mesure));
+    }
     
       const response = await api.post('/products', formData, {    
         headers: {    

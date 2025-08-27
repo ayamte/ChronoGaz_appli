@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react'
+import React, { useState, useEffect, useRef } from 'react';
 import {
   MdLocationOn as MapPin,
   MdNavigation as Navigation,
@@ -17,90 +17,170 @@ import {
   MdPhone as Phone,
   MdEmail as Email,
   MdAdd as Plus
-} from 'react-icons/md'
-import './NextOrderMap.css'
-import livraisonService from '../../../services/livraisonService'
-import { authService } from '../../../services/authService'
-import planificationService from '../../../services/planificationService'
-import { useWebSocket } from '../../../hooks/useWebSocket';  
+} from 'react-icons/md';
+import './NextOrderMap.css';
+import livraisonService from '../../../services/livraisonService';
+import { authService } from '../../../services/authService';
+import planificationService from '../../../services/planificationService';
+import { useWebSocket } from '../../../hooks/useWebSocket';
+import RealDeliveryMap from './RealDeliveryMap';
 
 export default function NextOrderMapPage() {
-  const [livraisons, setLivraisons] = useState([])
-  const [selectedOrder, setSelectedOrder] = useState(null)
-  const [isDetailsModalOpen, setIsDetailsModalOpen] = useState(false)
-  const [isStatusModalOpen, setIsStatusModalOpen] = useState(false)
-  const [statusAction, setStatusAction] = useState('')
-  const [statusNote, setStatusNote] = useState('')
-  const [loading, setLoading] = useState(false)
-  const [notification, setNotification] = useState(null)
-  const [mapLoaded, setMapLoaded] = useState(false)
-  const [currentUser, setCurrentUser] = useState(null)
-  const mapRef = useRef(null)
+  const [livraisons, setLivraisons] = useState([]);
+  const [selectedOrder, setSelectedOrder] = useState(null);
+  const [isDetailsModalOpen, setIsDetailsModalOpen] = useState(false);
+  const [isStatusModalOpen, setIsStatusModalOpen] = useState(false);
+  const [statusAction, setStatusAction] = useState('');
+  const [statusNote, setStatusNote] = useState('');
+  const [loading, setLoading] = useState(false);
+  const [notification, setNotification] = useState(null);
+  const [currentUser, setCurrentUser] = useState(null);
+  const [driverLocation, setDriverLocation] = useState(null);
   
-  const API_BASE_URL = process.env.REACT_APP_API_URL || 'http://localhost:5000';
+  // ✅ Nouveaux états et ref pour gérer le suivi GPS
+  const [isTracking, setIsTracking] = useState(false);
+  const watchIdRef = useRef(null);
 
-  const { subscribe, isConnected } = useWebSocket(true);  
+  const API_BASE_URL = process.env.REACT_APP_API_URL || 'http://localhost:5001';
 
-useEffect(() => {    
-  console.log('🔌 [NextOrderMap] État connexion WebSocket:', isConnected);  
-  console.log('👤 [NextOrderMap] Current user employee_id:', currentUser?.employee_id);  
-    
-  if (currentUser?.employee_id && isConnected) {    
-    console.log('✅ [NextOrderMap] Abonnement aux événements WebSocket...');  
+  const { subscribe, isConnected, updatePosition } = useWebSocket(true);
+
+  // ✅ Nouvelle fonction : démarre la surveillance GPS
+  const handleStartTracking = () => {
+    console.log('🎯 BOUTON SUIVI CLIQUÉ !');
+    if (!navigator.geolocation) {
+      setNotification({ type: 'warning', message: 'Géolocalisation non supportée par le navigateur' });
+      return;
+    }
+
+    if (isTracking) {
+      console.log('ℹ️ Le suivi est déjà actif.');
+      return;
+    }
+
+    setNotification({ type: 'info', message: 'Démarrage du suivi GPS...' });
+    setIsTracking(true);
+
+    const watchId = navigator.geolocation.watchPosition(
+      (position) => {
+        const newPosition = {
+          latitude: position.coords.latitude,
+          longitude: position.coords.longitude
+        };
+        setDriverLocation(newPosition);
+        console.log('📍 Position du chauffeur mise à jour:', newPosition);
+        
+        // ✅ C'est ici que l'appel crucial est toujours effectué si les conditions sont remplies
+        if (isConnected && (selectedOrder?.livraisonId || selectedOrder?.planificationId)) {
+          const trackingId = selectedOrder.livraisonId || selectedOrder.planificationId;
+          console.log(`📤 Envoi de la position pour l'ID: ${trackingId}`);
+          updatePosition(trackingId, newPosition.latitude, newPosition.longitude);
+        } else {
+          console.log('❌ Pas d\'envoi de position:', {
+            isConnected,
+            livraisonId: selectedOrder?.livraisonId,
+            planificationId: selectedOrder?.planificationId,
+            selectedOrder: !!selectedOrder
+          });
+        }
+      },
+      (error) => {
+        console.error('❌ Erreur de suivi GPS:', error);
+        setNotification({ type: 'error', message: `Erreur GPS: ${error.message}` });
+        setIsTracking(false);
+        if (watchIdRef.current) {
+          navigator.geolocation.clearWatch(watchIdRef.current);
+        }
+      },
+      { 
+        enableHighAccuracy: true, 
+        timeout: 20000, 
+        maximumAge: 0 
+      }
+    );
+
+    watchIdRef.current = watchId;
+  };
+
+  // ✅ Nouvelle fonction : arrête la surveillance GPS
+  const handleStopTracking = () => {
+    if (watchIdRef.current) {
+      navigator.geolocation.clearWatch(watchIdRef.current);
+      console.log('🚫 Suivi GPS arrêté.');
+      setIsTracking(false);
+      setNotification({ type: 'info', message: "Suivi GPS arrêté." });
+    }
+  };
+
+  // ✅ useEffect pour le nettoyage lors du démontage du composant
+  useEffect(() => {
+    return () => {
+      if (watchIdRef.current) {
+        navigator.geolocation.clearWatch(watchIdRef.current);
+      }
+    };
+  }, []);
+
+  // Le reste du code...
+  useEffect(() => {
+    console.log('🔌 [NextOrderMap] État connexion WebSocket:', isConnected);
+    console.log('👤 [NextOrderMap] Current user employee_id:', currentUser?.employee_id);
       
-    const unsubscribe = subscribe('new_assignment', (data) => {    
-      console.log('📋 [NextOrderMap] Nouvelle assignation reçue:', data);  
-      console.log('🔍 [NextOrderMap] Comparaison IDs:', {  
-        received: data.employeeId,  
-        current: currentUser.employee_id,  
-        match: data.employeeId === currentUser.employee_id  
-      });  
+    if (currentUser?.employee_id && isConnected) {
+      console.log('✅ [NextOrderMap] Abonnement aux événements WebSocket...');
         
-      if (data.employeeId === currentUser.employee_id) {    
-        console.log('✅ [NextOrderMap] Assignation pour cet employé - rechargement...');  
-        refreshDeliveryData();  
-        setNotification({    
-          type: "info",    
-          message: `Nouvelle commande assignée: ${data.orderNumber}`    
-        });    
-      } else {  
-        console.log('❌ [NextOrderMap] Assignation pour un autre employé');  
-      }  
-    });    
-        
-    return unsubscribe;    
-  } else {  
-    console.log('❌ [NextOrderMap] Conditions non remplies:', {  
-      hasEmployeeId: !!currentUser?.employee_id,  
-      isConnected  
-    });  
-  }  
-}, [currentUser, isConnected, subscribe]);
-
-  useEffect(() => {    
-    if (isConnected) {    
-      const testSubscribe = subscribe('test', (data) => {    
-        console.log('🧪 [NextOrderMap] Événement test reçu:', data);    
-      });    
+      const unsubscribe = subscribe('new_assignment', (data) => {
+        console.log('📋 [NextOrderMap] Nouvelle assignation reçue:', data);
+        console.log('🔍 [NextOrderMap] Comparaison IDs:', {
+          received: data.employeeId,
+          current: currentUser.employee_id,
+          match: data.employeeId === currentUser.employee_id
+        });
           
-      return () => testSubscribe();    
-    }    
-  }, [isConnected, subscribe]);  
-  
-  // Récupérer l'utilisateur connecté
+        if (data.employeeId === currentUser.employee_id) {
+          console.log('✅ [NextOrderMap] Assignation pour cet employé - rechargement...');
+          refreshDeliveryData();
+          setNotification({
+            type: "info",
+            message: `Nouvelle commande assignée: ${data.orderNumber}`
+          });
+        } else {
+          console.log('❌ [NextOrderMap] Assignation pour un autre employé');
+        }
+      });
+          
+      return unsubscribe;
+    } else {
+      console.log('❌ [NextOrderMap] Conditions non remplies:', {
+        hasEmployeeId: !!currentUser?.employee_id,
+        isConnected
+      });
+    }
+  }, [currentUser, isConnected, subscribe]);
+
+  useEffect(() => {
+    if (isConnected) {
+      const testSubscribe = subscribe('test', (data) => {
+        console.log('🧪 [NextOrderMap] Événement test reçu:', data);
+      });
+          
+      return () => testSubscribe();
+    }
+  }, [isConnected, subscribe]);
+
   useEffect(() => {
     const fetchCurrentUser = async () => {
       try {
-        console.log('🔍 DÉBUT - Récupération utilisateur connecté')
-        const token = authService.getToken()
+        console.log('🔍 DÉBUT - Récupération utilisateur connecté');
+        const token = authService.getToken();
         
         if (!token) {
-          console.error('❌ ERREUR: Aucun token trouvé')
+          console.error('❌ ERREUR: Aucun token trouvé');
           setNotification({
             type: "error",
             message: "Session expirée - veuillez vous reconnecter"
-          })
-          return
+          });
+          return;
         }
         
         const response = await fetch(`${API_BASE_URL}/api/users/profile`, {
@@ -108,163 +188,166 @@ useEffect(() => {
             'Authorization': `Bearer ${token}`,
             'Content-Type': 'application/json'
           }
-        })
+        });
         
         if (!response.ok) {
-          console.error('❌ ERREUR API:', response.status, response.statusText)
+          console.error('❌ ERREUR API:', response.status, response.statusText);
           setNotification({
             type: "error",
             message: `Erreur API: ${response.status} - ${response.statusText}`
-          })
-          return
+          });
+          return;
         }
         
-        const data = await response.json()
+        const data = await response.json();
         
         if (!data.success || !data.data) {
-          console.error('❌ ERREUR: Données utilisateur manquantes')
+          console.error('❌ ERREUR: Données utilisateur manquantes');
           setNotification({
             type: "error",
             message: "Erreur lors de la récupération du profil"
-          })
-          return
+          });
+          return;
         }
         
         const userData = {
           ...data.data,
           employee_id: data.data.employee_info?._id || data.data.employee_info?.matricule
-        }
+        };
         
         if (!userData.employee_id) {
-          console.error('❌ ERREUR: employee_id manquant dans userData')
+          console.error('❌ ERREUR: employee_id manquant dans userData');
           setNotification({
             type: "error",
             message: "ID employé manquant - contactez l'administrateur"
-          })
-          return
+          });
+          return;
         }
         
-        console.log('✅ Employee ID trouvé:', userData.employee_id)
-        setCurrentUser(userData)
+        console.log('✅ Employee ID trouvé:', userData.employee_id);
+        setCurrentUser(userData);
         
       } catch (error) {
-        console.error('💥 EXCEPTION lors de la récupération utilisateur:', error)
+        console.error('💥 EXCEPTION lors de la récupération utilisateur:', error);
         setNotification({
           type: "error",
           message: `Erreur technique: ${error.message}`
-        })
+        });
       }
+    };
+    fetchCurrentUser();
+  }, []);
+
+  useEffect(() => {
+    console.log('🔌 [NextOrderMap] État connexion:', isConnected);
+    console.log('📊 [NextOrderMap] Nombre de livraisons:', livraisons.length);
+  }, [isConnected, livraisons.length]);
+
+  const refreshDeliveryData = async () => {
+    console.log('🔄 [NextOrderMap] Début refreshDeliveryData');
+    console.log('👤 [NextOrderMap] Employee ID:', currentUser?.employee_id);
+      
+    if (!currentUser?.employee_id) {
+      console.log('⏳ [NextOrderMap] ATTENTE: employee_id non disponible');
+      return;
     }
-    fetchCurrentUser()
-  }, [])
-
-  useEffect(() => {    
-  console.log('🔌 [NextOrderMap] État connexion:', isConnected);    
-  console.log('📊 [NextOrderMap] Nombre de livraisons:', livraisons.length);    
-}, [isConnected, livraisons.length]);  
-
-  // ✅ FONCTION CORRIGÉE: Analyse correcte des relations Planification-Livraison
-const refreshDeliveryData = async () => {      
-  console.log('🔄 [NextOrderMap] Début refreshDeliveryData');    
-  console.log('👤 [NextOrderMap] Employee ID:', currentUser?.employee_id);    
       
-  if (!currentUser?.employee_id) {      
-    console.log('⏳ [NextOrderMap] ATTENTE: employee_id non disponible')      
-    return      
-  }      
+    try {
+      console.log('📡 [NextOrderMap] Appel API getPlanificationsByEmployee...');
+      const planificationsResponse = await planificationService.getPlanificationsByEmployee(currentUser.employee_id);
+          
+      console.log('📋 [NextOrderMap] Planifications reçues:', planificationsResponse.data?.length || 0);
       
-  try {      
-    console.log('📡 [NextOrderMap] Appel API getPlanificationsByEmployee...')      
-    const planificationsResponse = await planificationService.getPlanificationsByEmployee(currentUser.employee_id);      
+      const filteredPlanifications = planificationsResponse.data?.filter(planification => {
+        const commandeStatut = planification.commande_id?.statut;
+        const isCommandeTerminee = ['LIVREE', 'ANNULEE', 'ECHEC'].includes(commandeStatut);
           
-    console.log('📋 [NextOrderMap] Planifications reçues:', planificationsResponse.data?.length || 0)      
-      
-    // ✅ FILTRAGE SIMPLE: Exclure les commandes terminées    
-    const filteredPlanifications = planificationsResponse.data?.filter(planification => {    
-      const commandeStatut = planification.commande_id?.statut;    
-      const isCommandeTerminee = ['LIVREE', 'ANNULEE', 'ECHEC'].includes(commandeStatut);    
+        console.log(`🔍 Planification ${planification._id}: commande ${commandeStatut}`);
           
-      console.log(`🔍 Planification ${planification._id}: commande ${commandeStatut}`)    
-          
-      // Garder seulement les commandes non terminées    
-      return !isCommandeTerminee;    
-    }) || [];    
+        return !isCommandeTerminee;
+      }) || [];
         
-    console.log('✅ Résultat final:')    
-    console.log(`  - Planifications gardées: ${filteredPlanifications.length}`)    
+      console.log('✅ Résultat final:');
+      console.log(`  - Planifications gardées: ${filteredPlanifications.length}`);
         
-    console.log('✅ [NextOrderMap] Données mises à jour:', filteredPlanifications.length, 'planifications');    
-    setLivraisons(filteredPlanifications);      
+      setLivraisons(filteredPlanifications);
+      
+      // ✅ Correction : Définir automatiquement la prochaine commande pour le suivi
+      if (filteredPlanifications.length > 0) {
+        const nextOrderCandidate = transformLivraisonToOrder(filteredPlanifications[0]);
+        if (nextOrderCandidate) {
+          setSelectedOrder(nextOrderCandidate);
+          console.log('✅ Prochaine commande définie automatiquement :', nextOrderCandidate.orderNumber);
+        }
+      } else {
+        setSelectedOrder(null);
+      }
           
-  } catch (error) {      
-    console.error('💥 [NextOrderMap] Erreur lors du rechargement:', error);       
-    setNotification({    
-      type: "error",    
-      message: `Erreur chargement: ${error.message}`    
-    })    
-  }    
-};
+    } catch (error) {
+      console.error('💥 [NextOrderMap] Erreur lors du rechargement:', error);
+      setNotification({
+        type: "error",
+        message: `Erreur chargement: ${error.message}`
+      });
+    }
+  };
 
-  // Récupérer les données de livraison au chargement
   useEffect(() => {
     const fetchDeliveryData = async () => {
       if (!currentUser?.employee_id) {
-        return
+        return;
       }
 
       try {
-        setLoading(true)
-        await refreshDeliveryData()
+        setLoading(true);
+        await refreshDeliveryData();
         
         if (livraisons.length === 0) {
           setNotification({
             type: "info",
             message: "Aucune livraison assignée pour le moment"
-          })
+          });
         }
         
       } catch (error) {
-        console.error('💥 EXCEPTION lors de la récupération des données:', error)
+        console.error('💥 EXCEPTION lors de la récupération des données:', error);
         setNotification({
           type: "error",
           message: `Erreur chargement: ${error.message}`
-        })
+        });
       } finally {
-        setLoading(false)
+        setLoading(false);
       }
-    }
+    };
 
-    fetchDeliveryData()
-  }, [currentUser])
+    fetchDeliveryData();
+  }, [currentUser]);
 
-  // ✅ TRANSFORMATION CORRIGÉE: Gestion correcte des types Planification/Livraison
   const transformLivraisonToOrder = (item) => {
-    if (!item) return null
+    if (!item) return null;
     
-    const itemId = item.id || item._id
-    if (!itemId) return null
+    const itemId = item.id || item._id;
+    if (!itemId) return null;
     
-    // ✅ IDENTIFICATION CORRECTE DU TYPE basée sur les états métier
-    const isPlanification = item.etat === 'PLANIFIE'
-    const isLivraison = ['EN_COURS', 'LIVRE', 'ECHEC', 'ANNULE'].includes(item.etat)
+    const isPlanification = item.etat === 'PLANIFIE';
+    const isLivraison = ['EN_COURS', 'LIVRE', 'ECHEC', 'ANNULE'].includes(item.etat);
     
-    const commandeData = item.commande_id
-    const customerData = item.commande_id?.customer_id
-    const addressData = item.commande_id?.address_id
+    const commandeData = item.commande_id;
+    const customerData = item.commande_id?.customer_id;
+    const addressData = item.commande_id?.address_id;
     
-    if (!commandeData) return null
+    if (!commandeData) return null;
     
     return {
       id: itemId,
       orderNumber: commandeData?.numero_commande || 'N/A',
-      // ✅ GESTION CORRECTE DE L'ID DE PLANIFICATION
       planificationId: isPlanification ? itemId : (item.planification_id?._id || item.planification_id || itemId),
       customer: {
         id: customerData?._id || '',
-        name: customerData?.physical_user_id 
+        name: customerData?.physical_user_id
           ? `${customerData.physical_user_id.first_name} ${customerData.physical_user_id.last_name}`
           : customerData?.moral_user_id?.raison_sociale || 'Client inconnu',
-        phone: customerData?.physical_user_id?.telephone_principal || 
+        phone: customerData?.physical_user_id?.telephone_principal ||
                customerData?.moral_user_id?.telephone_principal || '',
         email: '',
       },
@@ -306,842 +389,674 @@ const refreshDeliveryData = async () => {
           userName: currentUser?.name || 'Système',
         }
       ]
-    }
-  }
+    };
+  };
 
-  // Mapping des statuts métier vers statuts d'affichage
   const mapLivraisonStatus = (etat) => {
     switch (etat) {
-      case 'PLANIFIE': return 'assigned'
-      case 'EN_COURS': return 'en_route'
-      case 'LIVRE': return 'delivered'
-      case 'ECHEC': return 'failed'
-      case 'ANNULE': return 'cancelled'
-      default: return 'assigned'
+      case 'PLANIFIE': return 'assigned';
+      case 'EN_COURS': return 'en_route';
+      case 'LIVRE': return 'delivered';
+      case 'ECHEC': return 'failed';
+      case 'ANNULE': return 'cancelled';
+      default: return 'assigned';
     }
-  }
+  };
 
-  // Convertir et filtrer les données pour l'affichage
-  const orders = livraisons.map(transformLivraisonToOrder).filter(order => order !== null)
+  const orders = livraisons.map(transformLivraisonToOrder).filter(order => order !== null);
   
-  // Filtrer les commandes actives (exclure les terminées)
-  const activeOrders = orders.filter(order => 
+  const activeOrders = orders.filter(order =>
     !['delivered', 'cancelled', 'failed'].includes(order.status)
-  )
+  );
 
-  // Trier par priorité
   const sortedOrders = [...activeOrders].sort((a, b) => {
-    const priorityOrder = { urgent: 4, high: 3, medium: 2, low: 1 }
-    const priorityDiff = priorityOrder[b.priority] - priorityOrder[a.priority]
-    if (priorityDiff !== 0) return priorityDiff
-    return (a.estimatedTravelTime || 0) - (b.estimatedTravelTime || 0)
-  })
+    const priorityOrder = { urgent: 4, high: 3, medium: 2, low: 1 };
+    const priorityDiff = priorityOrder[b.priority] - priorityOrder[a.priority];
+    if (priorityDiff !== 0) return priorityDiff;
+    return (a.estimatedTravelTime || 0) - (b.estimatedTravelTime || 0);
+  });
 
-  const nextOrder = sortedOrders[0]
+  const nextOrder = sortedOrders[0];
 
-  // ✅ DÉMARRAGE DE ROUTE CORRIGÉ: Gestion correcte de la transition Planification -> Livraison
   const handleStartRoute = async (order) => {
     if (!order.planificationId) {
       setNotification({
         type: "error",
         message: "Impossible de démarrer la livraison - planification manquante"
-      })
-      return
+      });
+      return;
     }
 
-    setLoading(true)
+    setLoading(true);
     try {
       const deliveryData = {
-        latitude: currentUser?.currentLocation?.latitude || 0,
-        longitude: currentUser?.currentLocation?.longitude || 0,
+        latitude: driverLocation?.latitude || 0,
+        longitude: driverLocation?.longitude || 0,
         details: `Démarrage de la livraison pour ${order.customer.name}`
-      }
+      };
 
-      console.log('🚀 Démarrage livraison pour planification:', order.planificationId)
+      console.log('🚀 Démarrage livraison pour planification:', order.planificationId);
       
-      // Créer la livraison depuis la planification (relation 1:1)  
-      await livraisonService.startLivraison(order.planificationId, deliveryData)  
+      await livraisonService.startLivraison(order.planificationId, deliveryData);
   
-      // ✅ DÉLAI DE SYNCHRONISATION: Permettre au backend de traiter la création  
-      await new Promise(resolve => setTimeout(resolve, 1500));  
+      await new Promise(resolve => setTimeout(resolve, 1500));
   
-      // Recharger les données avec filtrage intelligent  
-      await refreshDeliveryData()  
+      await refreshDeliveryData();
   
-      setNotification({  
-        type: "success",  
-        message: `Route démarrée vers ${order.customer.name}`  
-      })  
+      setNotification({
+        type: "success",
+        message: `Route démarrée vers ${order.customer.name}`
+      });
   
-      // Ouvrir Google Maps  
-      const address = `${order.deliveryAddress.street}, ${order.deliveryAddress.city}`  
-      const encodedAddress = encodeURIComponent(address)  
-      console.log('🗺️ Ouverture Google Maps pour:', address)  
-      window.open(`https://www.google.com/maps/dir/?api=1&destination=${encodedAddress}`, "_blank")  
+      const address = `${order.deliveryAddress.street}, ${order.deliveryAddress.city}`;
+      const encodedAddress = encodeURIComponent(address);
+      console.log('🗺️ Ouverture Google Maps pour:', address);
+      window.open(`https://www.google.com/maps/dir/?api=1&destination=${encodedAddress}`, "_blank");
   
-      setTimeout(() => setNotification(null), 5000)  
-    } catch (error) {  
-      console.error('💥 EXCEPTION démarrage route:', error)  
-      setNotification({  
-        type: "error",  
-        message: "Erreur lors du démarrage de la route"  
-      })  
-    } finally {  
-      setLoading(false)  
-    }  
-  }  
+      setTimeout(() => setNotification(null), 5000);
+    } catch (error) {
+      console.error('💥 EXCEPTION démarrage route:', error);
+      setNotification({
+        type: "error",
+        message: "Erreur lors du démarrage de la route"
+      });
+    } finally {
+      setLoading(false);
+    }
+  };
   
-  // ✅ GESTION DES CHANGEMENTS DE STATUT CORRIGÉE  
-  const handleStatusChange = async (order, newStatus, note = '') => {  
-    setLoading(true)  
-    try {  
-      const statusMapping = {  
-        'delivered': 'LIVRE',  
-        'failed': 'ECHEC',  
-        'cancelled': 'ANNULE'  
-      }  
+  const handleStatusChange = async (order, newStatus, note = '') => {
+    setLoading(true);
+    try {
+      const statusMapping = {
+        'delivered': 'LIVRE',
+        'failed': 'ECHEC',
+        'cancelled': 'ANNULE'
+      };
   
-      let livraisonId = null  
+      let livraisonId = null;
   
-      // ✅ RECHERCHE INTELLIGENTE: Chercher une livraison existante  
-      try {  
-        console.log('🔍 Recherche livraison pour planification:', order.planificationId)  
+      try {
+        console.log('🔍 Recherche livraison pour planification:', order.planificationId);
           
-        // Utiliser l'API pour chercher par planification_id  
-        const existingLivraisons = await livraisonService.getLivraisons({  
-          planification_id: order.planificationId,  
-          etat: 'EN_COURS'  
-        })  
+        const existingLivraisons = await livraisonService.getLivraisons({
+          planification_id: order.planificationId,
+          etat: 'EN_COURS'
+        });
   
-        if (existingLivraisons.data && existingLivraisons.data.length > 0) {  
-          const existingLivraison = existingLivraisons.data[0]  
-          livraisonId = existingLivraison.id || existingLivraison._id  
-          console.log('✅ Livraison existante trouvée:', livraisonId)  
-        }  
-      } catch (searchError) {  
-        console.error('❌ Erreur recherche livraison:', searchError)  
-      }  
+        if (existingLivraisons.data && existingLivraisons.data.length > 0) {
+          const existingLivraison = existingLivraisons.data[0];
+          livraisonId = existingLivraison.id || existingLivraison._id;
+          console.log('✅ Livraison existante trouvée:', livraisonId);
+        }
+      } catch (searchError) {
+        console.error('❌ Erreur recherche livraison:', searchError);
+      }
   
-      // ✅ CRÉATION AUTOMATIQUE: Si aucune livraison trouvée pour une planification  
-      if (!livraisonId && order.isPlanification && order.etat === 'PLANIFIE') {  
-        console.log('📋 Création automatique de livraison pour planification')  
+      if (!livraisonId && order.isPlanification && order.etat === 'PLANIFIE') {
+        console.log('📋 Création automatique de livraison pour planification');
           
-        const deliveryData = {  
-          latitude: currentUser?.currentLocation?.latitude || 0,  
-          longitude: currentUser?.currentLocation?.longitude || 0,  
-          details: `Démarrage automatique pour changement de statut`  
-        }  
+        const deliveryData = {
+          latitude: driverLocation?.latitude || 0,
+          longitude: driverLocation?.longitude || 0,
+          details: `Démarrage automatique pour changement de statut`
+        };
   
-        const startResult = await livraisonService.startLivraison(order.planificationId, deliveryData)  
-        livraisonId = startResult.data?._id || startResult._id  
+        const startResult = await livraisonService.startLivraison(order.planificationId, deliveryData);
+        livraisonId = startResult.data?._id || startResult._id;
           
-        // Délai pour permettre la création  
-        await new Promise(resolve => setTimeout(resolve, 1000));  
-      }  
+        await new Promise(resolve => setTimeout(resolve, 1000));
+      }
   
-      if (!livraisonId) {  
-        throw new Error('Impossible de trouver ou créer une livraison')  
-      }  
+      if (!livraisonId) {
+        throw new Error('Impossible de trouver ou créer une livraison');
+      }
   
-      // ✅ FINALISATION: Compléter la livraison  
-      const completionData = {  
-        latitude: currentUser?.currentLocation?.latitude || 0,  
-        longitude: currentUser?.currentLocation?.longitude || 0,  
-        details: note,  
-        commentaires_livreur: note,  
-        etat: statusMapping[newStatus] || 'LIVRE'  
-      }  
+      const completionData = {
+        latitude: driverLocation?.latitude || 0,
+        longitude: driverLocation?.longitude || 0,
+        details: note,
+        commentaires_livreur: note,
+        etat: statusMapping[newStatus] || 'LIVRE'
+      };
   
-      console.log('📤 Finalisation livraison:', livraisonId, 'avec statut:', statusMapping[newStatus])  
-      await livraisonService.completeLivraison(livraisonId, completionData)  
+      console.log('📤 Finalisation livraison:', livraisonId, 'avec statut:', statusMapping[newStatus]);
+      await livraisonService.completeLivraison(livraisonId, completionData);
   
-      // ✅ SYNCHRONISATION: Délai et rechargement  
-      await new Promise(resolve => setTimeout(resolve, 1500));  
-      await refreshDeliveryData()  
+      await new Promise(resolve => setTimeout(resolve, 1500));
+      await refreshDeliveryData();
   
-      setIsStatusModalOpen(false)  
-      setStatusNote('')  
+      setIsStatusModalOpen(false);
+      setStatusNote('');
   
-      const statusText = {  
-        'delivered': 'livrée',  
-        'failed': 'annulée (échec)',  
-        'cancelled': 'annulée'  
-      }  
+      const statusText = {
+        'delivered': 'livrée',
+        'failed': 'annulée (échec)',
+        'cancelled': 'annulée'
+      };
   
-      setNotification({  
-        type: "success",  
-        message: `Commande ${order.orderNumber} marquée comme ${statusText[newStatus]}`  
-      })  
+      setNotification({
+        type: "success",
+        message: `Commande ${order.orderNumber} marquée comme ${statusText[newStatus]}`
+      });
   
-      setTimeout(() => setNotification(null), 5000)  
-    } catch (error) {  
-      console.error('💥 EXCEPTION changement statut:', error)  
-      setNotification({  
-        type: "error",  
-        message: "Erreur lors de la mise à jour du statut"  
-      })  
-    } finally {  
-      setLoading(false)  
-    }  
-  }  
+      setTimeout(() => setNotification(null), 5000);
+    } catch (error) {
+      console.error('💥 EXCEPTION changement statut:', error);
+      setNotification({
+        type: "error",
+        message: "Erreur lors de la mise à jour du statut"
+      });
+    } finally {
+      setLoading(false);
+    }
+  };
   
-  // Fonctions utilitaires pour l'affichage  
-  const getPriorityColor = (priority) => {  
-    switch (priority) {  
-      case "urgent": return "nom-priority-urgent"  
-      case "high": return "nom-priority-high"  
-      case "medium": return "nom-priority-medium"  
-      case "low": return "nom-priority-low"  
-      default: return "nom-priority-default"  
-    }  
-  }  
+  const getPriorityColor = (priority) => {
+    switch (priority) {
+      case "urgent": return "nom-priority-urgent";
+      case "high": return "nom-priority-high";
+      case "medium": return "nom-priority-medium";
+      case "low": return "nom-priority-low";
+      default: return "nom-priority-default";
+    }
+  };
   
-  const getPriorityText = (priority) => {  
-    switch (priority) {  
-      case "urgent": return "Urgente"  
-      case "high": return "Haute"  
-      case "medium": return "Moyenne"  
-      case "low": return "Basse"  
-      default: return priority  
-    }  
-  }  
+  const getPriorityText = (priority) => {
+    switch (priority) {
+      case "urgent": return "Urgente";
+      case "high": return "Haute";
+      case "medium": return "Moyenne";
+      case "low": return "Basse";
+      default: return priority;
+    }
+  };
   
-  const getPriorityIcon = (priority) => {  
-    switch (priority) {  
-      case "urgent":  
-      case "high":  
-        return <ArrowUp className="nom-priority-icon" />  
-      case "medium":  
-        return <Minus className="nom-priority-icon" />  
-      case "low":  
-        return <ArrowDown className="nom-priority-icon" />  
-      default:  
-        return null  
-    }  
-  }  
+  const getPriorityIcon = (priority) => {
+    switch (priority) {
+      case "urgent":
+      case "high":
+        return <ArrowUp className="nom-priority-icon" />;
+      case "medium":
+        return <Minus className="nom-priority-icon" />;
+      case "low":
+        return <ArrowDown className="nom-priority-icon" />;
+      default:
+        return null;
+    }
+  };
   
-  const getStatusColor = (status) => {  
-    switch (status) {  
-      case "assigned": return "nom-status-assigned"  
-      case "en_route": return "nom-status-en-route"  
-      case "delivered": return "nom-status-delivered"  
-      case "failed": return "nom-status-failed"  
-      case "cancelled": return "nom-status-cancelled"  
-      default: return "nom-status-default"  
-    }  
-  }  
+  const getStatusColor = (status) => {
+    switch (status) {
+      case "assigned": return "nom-status-assigned";
+      case "en_route": return "nom-status-en-route";
+      case "delivered": return "nom-status-delivered";
+      case "failed": return "nom-status-failed";
+      case "cancelled": return "nom-status-cancelled";
+      default: return "nom-status-default";
+    }
+  };
   
-  const getStatusText = (status) => {  
-    switch (status) {  
-      case "assigned": return "Assignée"  
-      case "en_route": return "En route"  
-      case "delivered": return "Livrée"  
-      case "failed": return "Échec"  
-      case "cancelled": return "Annulée"  
-      default: return status  
-    }  
-  }  
+  const getStatusText = (status) => {
+    switch (status) {
+      case "assigned": return "Assignée";
+      case "en_route": return "En route";
+      case "delivered": return "Livrée";
+      case "failed": return "Échec";
+      case "cancelled": return "Annulée";
+      default: return status;
+    }
+  };
   
-  const handleViewDetails = (order) => {  
-    setSelectedOrder(order)  
-    setIsDetailsModalOpen(true)  
-  }  
+  const handleViewDetails = (order) => {
+    setSelectedOrder(order);
+    setIsDetailsModalOpen(true);
+  };
   
-  const getMapMarkerColor = (priority) => {  
-    switch (priority) {  
-      case "urgent": return "#ef4444"  
-      case "high": return "#f97316"  
-      case "medium": return "#eab308"  
-      case "low": return "#22c55e"  
-      default: return "#6b7280"  
-    }  
-  }  
+  const getMapMarkerColor = (priority) => {
+    switch (priority) {
+      case "urgent": return "#ef4444";
+      case "high": return "#f97316";
+      case "medium": return "#eab308";
+      case "low": return "#22c55e";
+      default: return "#6b7280";
+    }
+  };
   
-  useEffect(() => {  
-    const timer = setTimeout(() => {  
-      setMapLoaded(true)  
-    }, 1500)  
-    return () => clearTimeout(timer)  
-  }, [])  
+  if (loading && livraisons.length === 0) {
+    return (
+      <div className="nom-layout">
+        <div className="nom-wrapper">
+          <div className="nom-container">
+            <div className="nom-loading-container">
+              <Loader2 className="nom-loading-spinner" />
+              <p>Chargement de vos livraisons...</p>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
   
-  if (loading && livraisons.length === 0) {  
-    return (  
-      <div className="nom-layout">  
-        <div className="nom-wrapper">  
-          <div className="nom-container">  
-            <div className="nom-loading-container">  
-              <Loader2 className="nom-loading-spinner" />  
-              <p>Chargement de vos livraisons...</p>  
-            </div>  
-          </div>  
-        </div>  
-      </div>  
-    )  
-  }  
+  return (
+    <div className="nom-layout">
+      <div className="nom-wrapper">
+        <div className="nom-container">
+          <main className="nom-main">
+            <div className="nom-page-header">
+              <h2 className="nom-page-title">Carte des Prochaines Commandes</h2>
+              <p className="nom-page-subtitle">Visualisez vos commandes assignées et planifiez votre itinéraire</p>
+            </div>
   
-  return (  
-    <div className="nom-layout">  
-      <div className="nom-wrapper">  
-        <div className="nom-container">  
-          <main className="nom-main">  
-            <div className="nom-page-header">  
-              <h2 className="nom-page-title">Carte des Prochaines Commandes</h2>  
-              <p className="nom-page-subtitle">Visualisez vos commandes assignées et planifiez votre itinéraire</p>  
-            </div>  
-  
-            {/* Notification */}  
-            {notification && (  
-              <div className={`nom-alert nom-alert-${notification.type}`}>  
-                {notification.type === "success" ? (  
-                  <CheckCircle className="nom-alert-icon" />  
-                ) : notification.type === "error" ? (  
-                  <AlertTriangle className="nom-alert-icon" />  
-                ) : (  
-                  <Target className="nom-alert-icon" />  
-                )}  
-                <div className="nom-alert-content">  
-                  {notification.message}  
-                </div>  
-              </div>  
-            )}  
-  
-            {/* Next Order Priority Card */}  
-            {nextOrder && (  
-              <div className="nom-card nom-priority-card">  
-                <div className="nom-card-header">  
-                  <div className="nom-card-title">  
-                    <Target className="nom-card-icon" />  
-                    <span>Prochaine Commande Prioritaire</span>  
-                  </div>  
-                </div>  
-                <div className="nom-card-content">  
-                  <div className="nom-priority-content">  
-                    <div className="nom-priority-info">  
-                      <div className="nom-badges">  
-                        <span className={`nom-badge ${getPriorityColor(nextOrder.priority)}`}>  
-                          {getPriorityIcon(nextOrder.priority)}  
-                          <span className="nom-badge-text">{getPriorityText(nextOrder.priority)}</span>  
-                        </span>  
-                        <span className={`nom-badge ${getStatusColor(nextOrder.status)}`}>  
-                          {getStatusText(nextOrder.status)}  
-                        </span>  
-                      </div>  
-                      <h3 className="nom-customer-name">{nextOrder.customer.name}</h3>  
-                      <p className="nom-order-number">Commande: {nextOrder.orderNumber}</p>  
-                      <div className="nom-order-details">  
-                        <div className="nom-detail-item">  
-                          <MapPin className="nom-detail-icon" />  
-                          <span>  
-                            {nextOrder.deliveryAddress.street}, {nextOrder.deliveryAddress.city}  
-                          </span>  
-                        </div>  
-                        <div className="nom-detail-item">  
-                          <Clock className="nom-detail-icon" />  
-                          <span>  
-                            {nextOrder.timeWindow.start} - {nextOrder.timeWindow.end}  
-                          </span>  
-                        </div>  
-                        <div className="nom-detail-item">  
-                          <Route className="nom-detail-icon" />  
-                          <span>  
-                            {nextOrder.distanceFromCurrent}km • {nextOrder.estimatedTravelTime}min  
-                          </span>  
-                        </div>  
-                      </div>  
-                    </div>  
-                    <div className="nom-priority-actions">  
-                      <button   
-                        className="nom-btn nom-btn-secondary"   
-                        onClick={() => handleViewDetails(nextOrder)}  
-                      >  
-                        Détails  
-                      </button>  
-                        
-                      <button   
-                        className="nom-btn nom-btn-success"   
-                        onClick={() => {  
-                          setSelectedOrder(nextOrder)  
-                          setStatusAction('delivered')  
-                          setIsStatusModalOpen(true)  
-                        }}  
-                        disabled={loading}  
-                      >  
-                        <CheckCircle className="nom-btn-icon" />  
-                        Marquer Livré  
-                      </button>  
-  
-                      <button   
-                        className="nom-btn nom-btn-danger"   
-                        onClick={() => {  
-                          setSelectedOrder(nextOrder)  
-                          setStatusAction('failed')  
-                          setIsStatusModalOpen(true)  
-                        }}  
-                        disabled={loading}  
-                      >  
-                        <X className="nom-btn-icon" />  
-                        Échec  
-                      </button>  
-  
-                      {nextOrder.status === "assigned" && (  
-                        <button   
-                          className="nom-btn nom-btn-primary"   
-                          onClick={() => handleStartRoute(nextOrder)}   
-                          disabled={loading}  
-                        >  
-                          {loading ? (  
-                            <>  
-                              <Loader2 className="nom-btn-icon nom-spinner" />  
-                              Démarrage...  
-                            </>  
-                          ) : (  
-                            <>  
-                              <Navigation className="nom-btn-icon" />  
-                              Démarrer Route  
-                            </>  
-                          )}  
-                        </button>  
-                      )}  
-                    </div>  
-                  </div>  
-                </div>  
-              </div>  
-            )}  
-            <div className="nom-content-grid">  
-              {/* Map Section */}  
-              <div className="nom-map-section">  
-                <div className="nom-card nom-map-card">  
-                  <div className="nom-card-header">  
-                    <div className="nom-card-title">  
-                      <MapPin className="nom-card-icon" />  
-                      <span>Carte Interactive</span>  
-                    </div>  
-                  </div>  
-                  <div className="nom-card-content nom-map-content">  
-                    <div ref={mapRef} className="nom-map-container">  
-                      {!mapLoaded ? (  
-                        <div className="nom-map-loading">  
-                          <div className="nom-loading-content">  
-                            <Loader2 className="nom-loading-spinner" />  
-                            <p className="nom-loading-text">Chargement de la carte...</p>  
-                          </div>  
-                        </div>  
-                      ) : (  
-                        <div className="nom-map-wrapper">  
-                          <div className="nom-map-bg" />  
-                            
-                          {/* Map Legend */}  
-                          <div className="nom-map-legend">  
-                            <h4 className="nom-legend-title">Légende des Priorités</h4>  
-                            <div className="nom-legend-items">  
-                              <div className="nom-legend-item">  
-                                <div className="nom-legend-color nom-legend-urgent"></div>  
-                                <span className="nom-legend-label">Urgente</span>  
-                              </div>  
-                              <div className="nom-legend-item">  
-                                <div className="nom-legend-color nom-legend-high"></div>  
-                                <span className="nom-legend-label">Haute</span>  
-                              </div>  
-                              <div className="nom-legend-item">  
-                                <div className="nom-legend-color nom-legend-medium"></div>  
-                                <span className="nom-legend-label">Moyenne</span>  
-                              </div>  
-                              <div className="nom-legend-item">  
-                                <div className="nom-legend-color nom-legend-low"></div>  
-                                <span className="nom-legend-label">Basse</span>  
-                              </div>  
-                            </div>  
-                          </div>  
-  
-                          {/* Map Markers */}  
-                          <div className="nom-map-markers">  
-                            {activeOrders.map((order, index) => (  
-                              <div  
-                                key={order.id}  
-                                className="nom-map-marker"  
-                                style={{  
-                                  left: `${20 + index * 15}%`,  
-                                  top: `${30 + index * 10}%`,  
-                                  backgroundColor: getMapMarkerColor(order.priority)  
-                                }}  
-                                onClick={() => handleViewDetails(order)}  
-                              >  
-                                <span className="nom-marker-number">{index + 1}</span>  
-                                <div className="nom-marker-tooltip">  
-                                  <p className="nom-tooltip-name">{order.customer.name}</p>  
-                                  <p className="nom-tooltip-order">{order.orderNumber}</p>  
-                                </div>  
-                              </div>  
-                            ))}  
-  
-                            {/* Current Location Marker */}  
-                            <div className="nom-current-location">  
-                              <div className="nom-current-marker"></div>  
-                              <div className="nom-current-label">Ma position</div>  
-                            </div>  
-                          </div>  
-  
-                          {/* Map Controls */}  
-                          <div className="nom-map-controls">  
-                            <button className="nom-map-control">  
-                              <Navigation className="nom-control-icon" />  
-                            </button>  
-                            <button className="nom-map-control">  
-                              <Plus className="nom-control-icon" />  
-                            </button>  
-                            <button className="nom-map-control">  
-                              <Minus className="nom-control-icon" />  
-                            </button>  
-                          </div>  
-                        </div>  
-                      )}  
-                    </div>  
-                  </div>  
-                </div>  
-              </div>  
-  
-              {/* Orders List */}  
-              <div className="nom-orders-section">  
-                <div className="nom-card nom-orders-card">  
-                  <div className="nom-card-header">  
-                    <div className="nom-card-title">  
-                      <Package className="nom-card-icon" />  
-                      <span>Mes Commandes</span>  
-                    </div>  
-                    <span className="nom-orders-count">{activeOrders.length} commandes</span>  
-                  </div>  
-                  <div className="nom-card-content nom-orders-content">  
-                    <div className="nom-orders-list">  
-                      {sortedOrders.map((order, index) => (  
-                        <div  
-                          key={order.id}  
-                          className={`nom-order-item ${  
-                            order.id === nextOrder?.id ? "nom-order-next" : ""  
-                          }`}  
-                          onClick={() => handleViewDetails(order)}  
-                        >  
-                          <div className="nom-order-header">  
-                            <div className="nom-order-left">  
-                              <div  
-                                className="nom-order-marker"  
-                                style={{ backgroundColor: getMapMarkerColor(order.priority) }}  
-                              >  
-                                {index + 1}  
-                              </div>  
-                              <span className={`nom-badge ${getPriorityColor(order.priority)}`}>  
-                                {getPriorityIcon(order.priority)}  
-                                <span className="nom-badge-text">{getPriorityText(order.priority)}</span>  
-                              </span>  
-                            </div>  
-                            <span className={`nom-badge ${getStatusColor(order.status)}`}>  
-                              {getStatusText(order.status)}  
-                            </span>  
-                          </div>  
-  
-                          <h3 className="nom-order-customer">{order.customer.name}</h3>  
-                          <p className="nom-order-number">{order.orderNumber}</p>  
-  
-                          <div className="nom-order-info">  
-                            <div className="nom-order-detail">  
-                              <MapPin className="nom-order-icon" />  
-                              <span className="nom-order-address">  
-                                {order.deliveryAddress.street}, {order.deliveryAddress.city}  
-                              </span>  
-                            </div>  
-                            <div className="nom-order-detail">  
-                              <Clock className="nom-order-icon" />  
-                              <span>  
-                                {order.timeWindow.start} - {order.timeWindow.end}  
-                              </span>  
-                            </div>  
-                          </div>  
-                        </div>  
-                      ))}  
-                    </div>  
-                  </div>  
-                </div>  
-              </div>  
-            </div>  
-          </main>  
-        </div>  
-      </div>  
-  
-      {/* Details Modal */}  
-      {isDetailsModalOpen && selectedOrder && (  
-        <div className="nom-modal-overlay" onClick={() => setIsDetailsModalOpen(false)}>  
-          <div className="nom-modal-content" onClick={(e) => e.stopPropagation()}>  
-            <div className="nom-modal-header">  
-              <div className="nom-modal-title">  
-                <Eye className="nom-modal-icon" />  
-                <span>Détails de la Commande</span>  
-              </div>  
-              <button   
-                className="nom-modal-close"   
-                onClick={() => setIsDetailsModalOpen(false)}  
-              >  
-                <X className="nom-close-icon" />  
-              </button>  
-            </div>  
-  
-            <div className="nom-modal-body">  
-              <div className="nom-details-grid">  
-                {/* Customer Info */}  
-                <div className="nom-details-section">  
-                  <div className="nom-details-card">  
-                    <div className="nom-details-header">  
-                      <h4 className="nom-details-title">Informations Client</h4>  
-                    </div>  
-                    <div className="nom-details-content">  
-                      <div className="nom-detail-row">  
-                        <span className="nom-detail-label">Nom:</span>  
-                        <span className="nom-detail-value">{selectedOrder.customer.name}</span>  
-                      </div>  
-                      <div className="nom-detail-row">  
-                        <Phone className="nom-detail-icon" />  
-                        <span className="nom-detail-value">{selectedOrder.customer.phone}</span>  
-                      </div>  
-                      {selectedOrder.customer.email && (  
-                        <div className="nom-detail-row">  
-                          <Email className="nom-detail-icon" />  
-                          <span className="nom-detail-value">{selectedOrder.customer.email}</span>  
-                        </div>  
-                      )}  
-                    </div>  
-                  </div>  
-                </div>  
-  
-                {/* Delivery Address */}  
-                <div className="nom-details-section">  
-                  <div className="nom-details-card">  
-                    <div className="nom-details-header">  
-                      <h4 className="nom-details-title">Adresse de Livraison</h4>  
-                    </div>  
-                    <div className="nom-details-content">  
-                      <div className="nom-detail-row">  
-                        <MapPin className="nom-detail-icon" />  
-                        <div className="nom-address-info">  
-                          <p>{selectedOrder.deliveryAddress.street}</p>  
-                          <p>{selectedOrder.deliveryAddress.postalCode} {selectedOrder.deliveryAddress.city}</p>  
-                        </div>  
-                      </div>  
-                    </div>  
-                  </div>  
-                </div>  
-              </div>  
-  
-              {/* Products Section */}  
-              <div className="nom-details-section nom-full-width">  
-                <div className="nom-details-card">  
-                  <div className="nom-details-header">  
-                    <h4 className="nom-details-title">Produits Commandés</h4>  
-                  </div>  
-                  <div className="nom-details-content">  
-                    <div className="nom-products-list">  
-                      {selectedOrder.products.map((product) => (  
-                        <div key={product._id || product.id} className="nom-product-item">  
-                          <div className="nom-product-info">  
-                            <h5 className="nom-product-name">  
-                              {product.product_id?.long_name || product.product_id?.short_name || product.productName}  
-                            </h5>  
-                            <p className="nom-product-code">  
-                              Code: {product.product_id?.ref || product.productCode}  
-                            </p>  
-                          </div>  
-                          <div className="nom-product-details">  
-                            <p className="nom-product-quantity">  
-                              {product.quantity} {product.UM_id?.unitemesure || product.unit}  
-                            </p>  
-                            <p className="nom-product-price">  
-                              {(product.price || product.unitPrice)?.toFixed(2)}MAD / unité  
-                            </p>  
-                            <p className="nom-product-total">  
-                              Total: {((product.quantity * (product.price || product.unitPrice)) || product.totalPrice)?.toFixed(2)}MAD  
-                            </p>  
-                          </div>  
-                        </div>  
-                      ))}  
-                    </div>  
-                    <div className="nom-order-total">  
-                      <div className="nom-total-row">  
-                        <span className="nom-total-label">Total Commande:</span>  
-                        <span className="nom-total-value">{selectedOrder.totalAmount?.toFixed(2)}MAD</span>  
-                      </div>  
-                    </div>  
-                  </div>  
-                </div>  
-              </div>  
-  
-              {/* Customer Notes */}  
-              {selectedOrder.customerNotes && (  
-                <div className="nom-details-section nom-full-width">  
-                  <div className="nom-details-card">  
-                    <div className="nom-details-header">  
-                      <h4 className="nom-details-title">Notes du Client</h4>  
-                    </div>  
-                    <div className="nom-details-content">  
-                      <p className="nom-customer-notes">{selectedOrder.customerNotes}</p>  
-                    </div>  
-                  </div>  
-                </div>  
-              )}  
-  
-              {/* Order History */}  
-              <div className="nom-details-section nom-full-width">  
-                <div className="nom-details-card">  
-                  <div className="nom-details-header">  
-                    <h4 className="nom-details-title">Historique de la Commande</h4>  
-                  </div>  
-                  <div className="nom-details-content">  
-                    <div className="nom-history-list">  
-                      {selectedOrder.history.map((entry) => (  
-                        <div key={entry.id} className="nom-history-item">  
-                          <div className="nom-history-dot"></div>  
-                          <div className="nom-history-content">  
-                            <div className="nom-history-header">  
-                              <h5 className="nom-history-action">{entry.action}</h5>  
-                              <span className="nom-history-time">  
-                                {new Date(entry.timestamp).toLocaleString('fr-FR')}  
-                              </span>  
-                            </div>  
-                            <p className="nom-history-details">{entry.details}</p>  
-                            <p className="nom-history-user">Par: {entry.userName}</p>  
-                          </div>  
-                        </div>  
-                      ))}  
-                    </div>  
-                  </div>  
-                </div>  
-              </div>  
-            </div>  
-  
-            <div className="nom-modal-footer">  
-              <button   
-                className="nom-btn nom-btn-secondary"   
-                onClick={() => setIsDetailsModalOpen(false)}  
-              >  
-                Fermer  
-              </button>  
-              {selectedOrder.status === "assigned" && (  
-                <button   
-                  className="nom-btn nom-btn-primary"   
-                  onClick={() => handleStartRoute(selectedOrder)}   
-                  disabled={loading}  
-                >  
-                  {loading ? (  
-                    <>  
-                      <Loader2 className="nom-btn-icon nom-spinner" />  
-                      Démarrage...  
-                    </>  
-                  ) : (  
-                    <>  
-                      <Navigation className="nom-btn-icon" />  
-                      Démarrer Route  
-                    </>  
-                  )}  
-                </button>  
-              )}  
-            </div>  
-          </div>  
-        </div>  
-      )}  
-  
-      {/* Status Change Modal */}  
-      {isStatusModalOpen && selectedOrder && (  
-        <div className="nom-modal-overlay" onClick={() => setIsStatusModalOpen(false)}>  
-          <div className="nom-modal-content nom-status-modal" onClick={(e) => e.stopPropagation()}>  
-            <div className="nom-modal-header">  
-              <div className="nom-modal-title">  
-                {statusAction === 'delivered' ? (  
-                  <>  
-                    <CheckCircle className="nom-modal-icon" />  
-                    <span>Marquer comme Livrée</span>  
-                  </>  
-                ) : statusAction === 'failed' ? (  
-                  <>  
-                    <X className="nom-modal-icon" />  
-                    <span>Signaler un Échec</span>  
-                  </>  
-                ) : (  
-                  <>  
-                    <X className="nom-modal-icon" />  
-                    <span>Annuler la Commande</span>  
-                  </>  
-                )}  
+            {/* Notification */}
+            {notification && (
+              <div className={`nom-alert nom-alert-${notification.type}`}>
+                {notification.type === "success" ? (
+                  <CheckCircle className="nom-alert-icon" />
+                ) : notification.type === "error" ? (
+                  <AlertTriangle className="nom-alert-icon" />
+                ) : (
+                  <Target className="nom-alert-icon" />
+                )}
+                <div className="nom-alert-content">
+                  {notification.message}
+                </div>
               </div>
-              <button   
-                className="nom-modal-close"   
-                onClick={() => setIsStatusModalOpen(false)}  
-              >  
-                <X className="nom-close-icon" />  
-              </button>  
-            </div>  
+            )}
   
-            <div className="nom-modal-body">  
-              <div className="nom-status-info">  
-                <h3 className="nom-status-customer">{selectedOrder.customer.name}</h3>  
-                <p className="nom-status-order">Commande: {selectedOrder.orderNumber}</p>  
-                <p>Adresse: {selectedOrder.deliveryAddress.street}, {selectedOrder.deliveryAddress.city}</p>  
-              </div>  
+            {/* Next Order Priority Card */}
+            {nextOrder && (
+              <div className="nom-card nom-priority-card">
+                <div className="nom-card-header">
+                  <div className="nom-card-title">
+                    <Target className="nom-card-icon" />
+                    <span>Prochaine Commande Prioritaire</span>
+                  </div>
+                </div>
+                <div className="nom-card-content">
+                  <div className="nom-priority-content">
+                    <div className="nom-priority-info">
+                      <div className="nom-badges">
+                        <span className={`nom-badge ${getPriorityColor(nextOrder.priority)}`}>
+                          {getPriorityIcon(nextOrder.priority)}
+                          <span className="nom-badge-text">{getPriorityText(nextOrder.priority)}</span>
+                        </span>
+                        <span className={`nom-badge ${getStatusColor(nextOrder.status)}`}>
+                          {getStatusText(nextOrder.status)}
+                        </span>
+                      </div>
+                      <h3 className="nom-customer-name">{nextOrder.customer.name}</h3>
+                      <p className="nom-order-number">Commande: {nextOrder.orderNumber}</p>
+                      <div className="nom-order-details">
+                        <div className="nom-detail-item">
+                          <MapPin className="nom-detail-icon" />
+                          <span>
+                            {nextOrder.deliveryAddress.street}, {nextOrder.deliveryAddress.city}
+                          </span>
+                        </div>
+                        <div className="nom-detail-item">
+                          <Clock className="nom-detail-icon" />
+                          <span>
+                            {nextOrder.timeWindow.start} - {nextOrder.timeWindow.end}
+                          </span>
+                        </div>
+                        <div className="nom-detail-item">
+                          <Route className="nom-detail-icon" />
+                          <span>
+                            {nextOrder.distanceFromCurrent}km • {nextOrder.estimatedTravelTime}min
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+                    <div className="nom-priority-actions">
+                      <button
+                        className="nom-btn nom-btn-secondary"
+                        onClick={() => handleViewDetails(nextOrder)}
+                      >
+                        Détails
+                      </button>
+                        
+                      <button
+                        className="nom-btn nom-btn-success"
+                        onClick={() => {
+                          setSelectedOrder(nextOrder);
+                          setStatusAction('delivered');
+                          setIsStatusModalOpen(true);
+                        }}
+                        disabled={loading}
+                      >
+                        <CheckCircle className="nom-btn-icon" />
+                        Marquer Livré
+                      </button>
   
-              <div className="nom-form-group">  
-                <label htmlFor="status-note" className="nom-form-label">  
-                  {statusAction === 'delivered' ? 'Note de livraison (optionnel)' :   
-                   statusAction === 'failed' ? 'Raison de l\'échec' : 'Raison de l\'annulation'}  
-                </label>  
-                <textarea  
-                  id="status-note"  
-                  value={statusNote}  
-                  onChange={(e) => setStatusNote(e.target.value)}  
-                  placeholder={statusAction === 'delivered'   
-                    ? "Ajouter une note sur la livraison..."   
-                    : statusAction === 'failed'  
-                    ? "Client absent, adresse incorrecte..."  
-                    : "Expliquer la raison de l'annulation..."  
-                  }  
-                  className="nom-form-textarea"  
-                  rows={3}  
-                  required={statusAction !== 'delivered'}  
-                />  
-              </div>  
-            </div>  
+                      <button
+                        className="nom-btn nom-btn-danger"
+                        onClick={() => {
+                          setSelectedOrder(nextOrder);
+                          setStatusAction('failed');
+                          setIsStatusModalOpen(true);
+                        }}
+                        disabled={loading}
+                      >
+                        <X className="nom-btn-icon" />
+                        Échec
+                      </button>
   
-            <div className="nom-modal-footer">  
-              <button   
-                className="nom-btn nom-btn-secondary"   
-                onClick={() => setIsStatusModalOpen(false)}  
-              >  
-                Annuler  
-              </button>  
-              <button   
-                className={`nom-btn ${statusAction === 'delivered' ? 'nom-btn-success' : 'nom-btn-danger'}`}  
-                onClick={() => handleStatusChange(selectedOrder, statusAction, statusNote)}  
-                disabled={loading || (statusAction !== 'delivered' && !statusNote.trim())}  
-              >  
-                {loading ? (  
-                  <>  
-                    <Loader2 className="nom-btn-icon nom-spinner" />  
-                    Traitement...  
-                  </>  
-                ) : (  
-                  <>  
-                    {statusAction === 'delivered' ? (  
-                      <>  
-                        <CheckCircle className="nom-btn-icon" />  
-                        Confirmer Livraison  
-                      </>  
-                    ) : (  
-                      <>  
-                        <X className="nom-btn-icon" />  
-                        Confirmer  
-                      </>  
-                    )}  
-                  </>  
-                )}  
-              </button>  
-            </div>  
-          </div>  
-        </div>  
-      )}  
-    </div>  
-  )  
+                      {nextOrder.status === "assigned" && (
+                        <button
+                          className="nom-btn nom-btn-primary"
+                          onClick={() => handleStartRoute(nextOrder)}
+                          disabled={loading}
+                        >
+                          {loading ? (
+                            <>
+                              <Loader2 className="nom-btn-icon nom-spinner" />
+                              Démarrage...
+                            </>
+                          ) : (
+                            <>
+                              <Navigation className="nom-btn-icon" />
+                              Démarrer Route
+                            </>
+                          )}
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
+            <div className="nom-content-grid">
+              {/* Map Section */}
+              <div className="nom-map-section">
+                <div className="nom-card nom-map-card">
+                  <div className="nom-card-header">
+                    <div className="nom-card-title">
+                      <MapPin className="nom-card-icon" />
+                      <span>Carte Interactive</span>
+                    </div>
+                    {/* ✅ Nouveaux boutons pour démarrer/arrêter le suivi */}
+                    <div className="nom-tracking-actions">
+                      <button
+                        className="nom-btn nom-btn-success"
+                        onClick={handleStartTracking}
+                        disabled={isTracking || (!selectedOrder?.livraisonId && !selectedOrder?.planificationId)}
+                      >
+                        <Target className="nom-btn-icon" />
+                        Démarrer le suivi
+                      </button>
+                      <button
+                        className="nom-btn nom-btn-danger"
+                        onClick={handleStopTracking}
+                        disabled={!isTracking}
+                      >
+                        <X className="nom-btn-icon" />
+                        Arrêter le suivi
+                      </button>
+                    </div>
+                  </div>
+                  <div className="nom-card-content nom-map-content">
+                    {/* ✅ Le composant de carte réel est maintenant ici */}
+                    <RealDeliveryMap
+                      orders={activeOrders}
+                      currentLocation={driverLocation}
+                      onOrderSelect={handleViewDetails}
+                      className="nom-real-map"
+                    />
+                  </div>
+                </div>
+              </div>
+  
+              {/* Orders List */}
+              <div className="nom-orders-section">
+                <div className="nom-card nom-orders-card">
+                  <div className="nom-card-header">
+                    <div className="nom-card-title">
+                      <Package className="nom-card-icon" />
+                      <span>Mes Commandes</span>
+                    </div>
+                    <span className="nom-orders-count">{activeOrders.length} commandes</span>
+                  </div>
+                  <div className="nom-card-content nom-orders-content">
+                    <div className="nom-orders-list">
+                      {sortedOrders.map((order, index) => (
+                        <div
+                          key={order.id}
+                          className={`nom-order-item ${
+                            order.id === nextOrder?.id ? "nom-order-next" : ""
+                          }`}
+                          onClick={() => handleViewDetails(order)}
+                        >
+                          <div className="nom-order-header">
+                            <div className="nom-order-left">
+                              <div
+                                className="nom-order-marker"
+                                style={{ backgroundColor: getMapMarkerColor(order.priority) }}
+                              >
+                                {index + 1}
+                              </div>
+                              <span className={`nom-badge ${getPriorityColor(order.priority)}`}>
+                                {getPriorityIcon(order.priority)}
+                                <span className="nom-badge-text">{getPriorityText(order.priority)}</span>
+                              </span>
+                            </div>
+                            <span className={`nom-badge ${getStatusColor(order.status)}`}>
+                              {getStatusText(order.status)}
+                            </span>
+                          </div>
+  
+                          <h3 className="nom-order-customer">{order.customer.name}</h3>
+                          <p className="nom-order-number">{order.orderNumber}</p>
+  
+                          <div className="nom-order-info">
+                            <div className="nom-order-detail">
+                              <MapPin className="nom-order-icon" />
+                              <span className="nom-order-address">
+                                {order.deliveryAddress.street}, {order.deliveryAddress.city}
+                              </span>
+                            </div>
+                            <div className="nom-order-detail">
+                              <Clock className="nom-order-icon" />
+                              <span>
+                                {order.timeWindow.start} - {order.timeWindow.end}
+                              </span>
+                            </div>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </main>
+        </div>
+      </div>
+  
+      {/* Details Modal */}
+      {isDetailsModalOpen && selectedOrder && (
+        <div className="nom-modal-overlay" onClick={() => setIsDetailsModalOpen(false)}>
+          <div className="nom-modal-content" onClick={(e) => e.stopPropagation()}>
+            <div className="nom-modal-header">
+              <div className="nom-modal-title">
+                <Eye className="nom-modal-icon" />
+                <span>Détails de la Commande</span>
+              </div>
+              <button
+                className="nom-modal-close"
+                onClick={() => setIsDetailsModalOpen(false)}
+              >
+                <X className="nom-close-icon" />
+              </button>
+            </div>
+  
+            <div className="nom-modal-body">
+              <div className="nom-details-grid">
+                {/* Customer Info */}
+                <div className="nom-details-section">
+                  <div className="nom-details-card">
+                    <div className="nom-details-header">
+                      <h4 className="nom-details-title">Informations Client</h4>
+                    </div>
+                    <div className="nom-details-content">
+                      <div className="nom-detail-row">
+                        <span className="nom-detail-label">Nom:</span>
+                        <span className="nom-detail-value">{selectedOrder.customer.name}</span>
+                      </div>
+                      <div className="nom-detail-row">
+                        <Phone className="nom-detail-icon" />
+                        <span className="nom-detail-value">{selectedOrder.customer.phone}</span>
+                      </div>
+                      {selectedOrder.customer.email && (
+                        <div className="nom-detail-row">
+                          <Email className="nom-detail-icon" />
+                          <span className="nom-detail-value">{selectedOrder.customer.email}</span>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                </div>
+  
+                {/* Delivery Info */}
+                <div className="nom-details-section">
+                  <div className="nom-details-card">
+                    <div className="nom-details-header">
+                      <h4 className="nom-details-title">Détails de la Livraison</h4>
+                    </div>
+                    <div className="nom-details-content">
+                      <div className="nom-detail-row">
+                        <span className="nom-detail-label">N° de Commande:</span>
+                        <span className="nom-detail-value">{selectedOrder.orderNumber}</span>
+                      </div>
+                      <div className="nom-detail-row">
+                        <span className="nom-detail-label">Adresse:</span>
+                        <span className="nom-detail-value">
+                          {selectedOrder.deliveryAddress.street}, {selectedOrder.deliveryAddress.city}
+                        </span>
+                      </div>
+                      <div className="nom-detail-row">
+                        <span className="nom-detail-label">Statut:</span>
+                        <span className={`nom-detail-value ${getStatusColor(selectedOrder.status)}`}>
+                          {getStatusText(selectedOrder.status)}
+                        </span>
+                      </div>
+                      <div className="nom-detail-row">
+                        <span className="nom-detail-label">Créée le:</span>
+                        <span className="nom-detail-value">
+                          {new Date(selectedOrder.orderDate).toLocaleDateString('fr-FR')}
+                        </span>
+                      </div>
+                      <div className="nom-detail-row">
+                        <span className="nom-detail-label">Notes client:</span>
+                        <span className="nom-detail-value">
+                          {selectedOrder.customerNotes || "Aucune"}
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+  
+              {/* Products Section */}
+              {selectedOrder.products.length > 0 && (
+                <div className="nom-details-section">
+                  <div className="nom-details-card">
+                    <div className="nom-details-header">
+                      <h4 className="nom-details-title">Liste des Produits</h4>
+                    </div>
+                    <div className="nom-details-content">
+                      <ul className="nom-product-list">
+                        {selectedOrder.products.map((product, index) => (
+                          <li key={index} className="nom-product-item">
+                            {product.quantite}x {product.produit_id?.name || 'Produit inconnu'}
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  </div>
+                </div>
+              )}
+  
+            </div>
+            <div className="nom-modal-actions">
+              <button
+                className="nom-btn nom-btn-secondary"
+                onClick={() => setIsDetailsModalOpen(false)}
+              >
+                Fermer
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+  
+      {/* Status Modal */}
+      {isStatusModalOpen && selectedOrder && (
+        <div className="nom-modal-overlay" onClick={() => setIsStatusModalOpen(false)}>
+          <div className="nom-modal-content" onClick={(e) => e.stopPropagation()}>
+            <div className="nom-modal-header">
+              <div className="nom-modal-title">
+                {statusAction === 'delivered' ? (
+                  <>
+                    <CheckCircle className="nom-modal-icon" />
+                    <span>Marquer comme livré</span>
+                  </>
+                ) : (
+                  <>
+                    <X className="nom-modal-icon" />
+                    <span>Marquer comme échec</span>
+                  </>
+                )}
+              </div>
+              <button
+                className="nom-modal-close"
+                onClick={() => setIsStatusModalOpen(false)}
+              >
+                <X className="nom-close-icon" />
+              </button>
+            </div>
+  
+            <div className="nom-modal-body">
+              <p>
+                Confirmez le statut pour la commande{" "}
+                <strong>{selectedOrder.orderNumber}</strong> de{" "}
+                <strong>{selectedOrder.customer.name}</strong>.
+              </p>
+              <textarea
+                className="nom-textarea"
+                rows="4"
+                placeholder="Ajouter une note ou un commentaire (obligatoire pour un échec)"
+                value={statusNote}
+                onChange={(e) => setStatusNote(e.target.value)}
+              ></textarea>
+            </div>
+  
+            <div className="nom-modal-actions">
+              <button
+                className="nom-btn nom-btn-secondary"
+                onClick={() => setIsStatusModalOpen(false)}
+                disabled={loading}
+              >
+                Annuler
+              </button>
+              <button
+                className={`nom-btn ${statusAction === 'delivered' ? 'nom-btn-success' : 'nom-btn-danger'}`}
+                onClick={() => handleStatusChange(selectedOrder, statusAction, statusNote)}
+                disabled={loading || (statusAction === 'failed' && !statusNote.trim())}
+              >
+                {loading ? (
+                  <>
+                    <Loader2 className="nom-btn-icon nom-spinner" />
+                    Envoi...
+                  </>
+                ) : (
+                  <span>Confirmer</span>
+                )}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
 }

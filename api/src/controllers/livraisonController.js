@@ -2,6 +2,7 @@ const Livraison = require('../models/Livraison');
 const LivraisonLine = require('../models/LivraisonLine');    
 const Planification = require('../models/Planification');    
 const Command = require('../models/Commande');    
+const UserAddress = require('../models/UserAddress');
 const CommandeLine = require('../models/CommandeLine');    
 const mongoose = require('mongoose');    
     
@@ -614,7 +615,101 @@ const cancelLivraison = async (req, res) => {
     });  
   }  
 };  
-      
+
+const getLivraisonTracking = async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    // Validation de l'ID avec mongoose
+    if (!mongoose.Types.ObjectId.isValid(id)) {
+      return res.status(400).json({
+        success: false,
+        message: 'ID de livraison invalide'
+      });
+    }
+
+    // Population pour récupérer toutes les données nécessaires
+    const livraison = await Livraison.findById(id)
+      .populate({
+        path: 'planification_id',
+        populate: [
+          {
+            path: 'commande_id',
+            populate: [
+              { path: 'address_id' },
+              { path: 'customer_id', select: 'customer_code type_client physical_user_id moral_user_id' }
+            ]
+          },
+          {
+            path: 'livreur_employee_id',
+            populate: {
+              path: 'physical_user_id',
+              select: 'first_name last_name _id'
+            }
+          }
+        ]
+      });
+
+    if (!livraison) {
+      return res.status(404).json({
+        success: false,
+        message: 'Livraison non trouvée'
+      });
+    }
+
+    const planification = livraison.planification_id;
+    if (!planification) {
+      return res.status(404).json({
+        success: false,
+        message: 'Planification associée non trouvée'
+      });
+    }
+
+    let dernierePosition = null;
+    const physicalUserId = planification.livreur_employee_id?.physical_user_id?._id;
+
+    if (physicalUserId) {
+      // ✅ CORRECTION ICI : Requête simplifiée et conversion en ObjectId
+      const livePosition = await UserAddress.findOne({
+        physical_user_id: new mongoose.Types.ObjectId(physicalUserId),
+        is_principal: false, // Votre Mongo shell a confirmé ce champ
+      })
+      .populate('address_id', 'latitude longitude createdAt');
+
+      if (livePosition && livePosition.address_id) {
+        dernierePosition = {
+          latitude: livePosition.address_id.latitude,
+          longitude: livePosition.address_id.longitude,
+          timestamp: livePosition.address_id.createdAt,
+        };
+      }
+    }
+    
+    // Construire l'objet de réponse pour le frontend
+    const trackingData = {
+      livraison_id: livraison._id,
+      planification_id: planification._id,
+      statut_livraison: livraison.etat,
+      destination: planification.commande_id.address_id,
+      client: planification.commande_id.customer_id,
+      livreur: planification.livreur_employee_id,
+      date_planifiee: planification.date_planifiee,
+      date_livraison: livraison.updatedAt,
+      derniere_position: dernierePosition,
+    };
+
+    res.status(200).json({
+      success: true,
+      data: trackingData
+    });
+  } catch (error) {
+    console.error('Erreur lors de la récupération du suivi:', error);
+    res.status(500).json({
+      success: false,
+      message: error.message
+    });
+  }
+};   
 module.exports = {      
   startLivraison,      
   completeLivraison,      
@@ -622,6 +717,7 @@ module.exports = {
   getLivraisonById,      
   updateLivraisonLines,  
   getLivraisonsStats,  
-  cancelLivraison  
+  cancelLivraison,
+  getLivraisonTracking 
 };
 

@@ -16,9 +16,39 @@ const Truck = require('../models/Truck');
 const getCommands = async (req, res) => {    
   try {    
     const { page = 1, limit = 20, status, search, priority, dateFrom, dateTo, customerId } = req.query;    
+    const user = req.user; // Utilisateur authentifié
         
     const filter = {};    
     const skip = (parseInt(page) - 1) * parseInt(limit);    
+    
+    // ✅ NOUVEAU: Si c'est un client, ne montrer que ses commandes
+    if (user.role_id.code === 'CLIENT') {
+      // Récupérer le customer_id du client connecté
+      const Customer = require('../models/Customer');
+      const PhysicalUser = await require('../models/PhysicalUser').findOne({ user_id: user._id });
+      const MoralUser = await require('../models/MoralUser').findOne({ user_id: user._id });
+      
+      const customer = await Customer.findOne({
+        $or: [
+          { physical_user_id: PhysicalUser?._id }, 
+          { moral_user_id: MoralUser?._id }
+        ]
+      });
+      
+      if (!customer) {
+        return res.status(404).json({
+          success: false,
+          message: 'Client non trouvé'
+        });
+      }
+      
+      filter.customer_id = customer._id;
+    }
+    
+    // ✅ NOUVEAU: Pour les admins, utiliser customerId si fourni
+    else if (customerId && mongoose.Types.ObjectId.isValid(customerId)) {    
+      filter.customer_id = customerId;    
+    }
         
     // ✅ NOUVEAU: Filtre basé sur le statut de commande directement
     if (status && status !== 'all') {    
@@ -37,10 +67,6 @@ const getCommands = async (req, res) => {
           filter.statut = statusToCommandeState[status];
         }
       }
-    }    
-        
-    if (customerId && mongoose.Types.ObjectId.isValid(customerId)) {    
-      filter.customer_id = customerId;    
     }    
         
     if (search) {    
@@ -153,7 +179,7 @@ const getCommands = async (req, res) => {
       message: error.message    
     });    
   }    
-};    
+};   
 
 // Récupérer une commande par ID (reste identique)
 const getCommandById = async (req, res) => {  

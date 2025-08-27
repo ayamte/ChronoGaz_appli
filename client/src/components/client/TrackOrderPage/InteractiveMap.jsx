@@ -3,7 +3,7 @@ import React, { useEffect, useRef, useCallback, useState, useMemo } from "react"
 import { useDeliveryTracking } from "../../../hooks/useDeliveryTracking";
 import { createCustomIcon, getMapStyles, fitMapBounds } from "../../../utils/mapUtils";
 
-const GRAPHHOPPER_API_KEY = '6fe731b8-5611-4fb5-afa2-da5059ae2564';
+//const GRAPHHOPPER_API_KEY = '6fe731b8-5611-4fb5-afa2-da5059ae2564';
 
 const InteractiveMap = ({
   deliveryId,
@@ -19,7 +19,7 @@ const InteractiveMap = ({
   const driverMarkerRef = useRef(null);
   const destinationMarkerRef = useRef(null);
   const routePolylineRef = useRef(null);
-  const lastRouteUpdateRef = useRef(null);
+  // ✅ SUPPRIMÉ: lastRouteUpdateRef pour permettre les mises à jour
 
   const [leafletLoaded, setLeafletLoaded] = useState(false);
   const [mapReady, setMapReady] = useState(false);
@@ -221,7 +221,7 @@ const InteractiveMap = ({
     createOrUpdateMarkers();
   }, [mapReady, leafletLoaded, driverPosition, destinationPosition, autoCenter, deliveryData]);
 
-  // Mise à jour de la route avec routeInfo du hook (plus d'appels API directs)
+  // ✅ CORRECTION: Mise à jour de la route simplifiée - TOUJOURS redessiner quand routeInfo change
   useEffect(() => {
     if (!showRoute || !mapReady || !routeInfo?.geometry) {
       // Supprimer la route existante si pas de géométrie
@@ -234,13 +234,7 @@ const InteractiveMap = ({
     }
 
     try {
-      // Vérifier si on doit mettre à jour la route
-      const routeKey = `${driverPosition?.lat},${driverPosition?.lng}-${destinationPosition?.lat},${destinationPosition?.lng}`;
-      if (lastRouteUpdateRef.current === routeKey) {
-        return; // Route déjà affichée pour ces positions
-      }
-
-      console.log('🗺️ Mise à jour de la route sur la carte...');
+      console.log('🗺️ Mise à jour de la route sur la carte...', routeInfo);
       
       const coords = decodePolyline(routeInfo.geometry);
       
@@ -254,14 +248,14 @@ const InteractiveMap = ({
         opacity: 0.8 
       }).addTo(mapInstanceRef.current);
 
-      lastRouteUpdateRef.current = routeKey;
       setGraphHopperError(null);
+      console.log('✅ Route mise à jour avec succès');
 
     } catch (err) {
       console.error('❌ Erreur affichage route:', err);
       setGraphHopperError("Erreur lors de l'affichage de l'itinéraire.");
     }
-  }, [mapReady, showRoute, routeInfo, driverPosition, destinationPosition, decodePolyline]);
+  }, [mapReady, showRoute, routeInfo, decodePolyline]); // ✅ Supprimé driverPosition et destinationPosition des dépendances
 
   // Fonctions de contrôle de la carte
   const centerOnDriver = useCallback(() => {
@@ -345,7 +339,7 @@ const InteractiveMap = ({
   }
 
   return (
-    <div className="bg-white rounded-lg shadow-md overflow-hidden">
+    <div className="bg-white rounded-lg shadow-md overflow-hidden relative">
       <div className="px-6 py-4 border-b bg-gray-50">
         <div className="flex justify-between items-center">
           <div>
@@ -353,7 +347,7 @@ const InteractiveMap = ({
               Suivi en Temps Réel
             </h3>
             <p className="text-sm text-gray-600">
-              Livraison #{deliveryData?.planification_id || deliveryId}
+              Livraison #{deliveryId || deliveryData?.planification_id}
             </p>
           </div>
           <div className="flex items-center space-x-4">
@@ -364,7 +358,7 @@ const InteractiveMap = ({
               </span>
             </div>
             
-            <button
+            {/*<button
               onClick={refetch}
               className="p-2 text-gray-400 hover:text-gray-600 transition-colors"
               title="Actualiser"
@@ -372,7 +366,7 @@ const InteractiveMap = ({
               <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.001 0 01-15.357-2m15.357 2H15" />
               </svg>
-            </button>
+  </button>*/}
           </div>
         </div>
       </div>
@@ -380,7 +374,7 @@ const InteractiveMap = ({
       <div className="relative">
         <div 
           ref={mapRef}
-          className="w-full h-96"
+          className="w-full h-96 z-10"
           style={{ minHeight: '400px' }}
         />
         
@@ -406,11 +400,21 @@ const InteractiveMap = ({
             <>
               <div className="text-center">
                 <p className="text-sm text-gray-600">Distance</p>
-                <p className="text-lg font-bold text-blue-800">{routeInfo.distance} km</p>
+                <p className="text-lg font-bold text-blue-800">
+                  {routeInfo.distance < 1 
+                  ? `${(Number(routeInfo.distance) * 1000).toFixed(0)} m`
+                  : `${Number(routeInfo.distance).toFixed(1)} km`
+                  }   
+                </p>
               </div>
               <div className="text-center">
                 <p className="text-sm text-gray-600">Temps estimé</p>
-                <p className="text-lg font-bold text-blue-800">{routeInfo.duration} min</p>
+                <p className="text-lg font-bold text-blue-800">
+                {routeInfo.duration > 60 
+                  ? `${(Number(routeInfo.duration) / 60).toFixed(0)} heurs ${(Number(routeInfo.duration) % 60).toFixed(0)} min`
+                  : `${Number(routeInfo.duration).toFixed(0)} min`
+                  } 
+                </p>
               </div>
             </>
           )}

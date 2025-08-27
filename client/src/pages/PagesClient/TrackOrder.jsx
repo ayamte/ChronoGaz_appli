@@ -15,14 +15,54 @@ import './TrackOrder.css';
 const TrackOrder = () => {          
   const [orderData, setOrderData] = useState(null);          
   const [loading, setLoading] = useState(true);          
-  const [error, setError] = useState(null);          
+  const [error, setError] = useState(null);  
+  const [availableOrders, setAvailableOrders] = useState([]);
+  const [showOrderSelection, setShowOrderSelection] = useState(false);
           
   const { orderId } = useParams();          
   const navigate = useNavigate();      
     
   const { subscribe, isConnected } = useWebSocket(true);      
+
+  // ✅ NOUVEAU: Fonction pour récupérer les commandes du client connecté
+  const fetchUserOrders = useCallback(async () => {
+    try {
+      // Récupérer les commandes du client connecté
+      const response = await api.get('/commands');
+      
+      if (response.data.success) {
+        const orders = response.data.data || [];
+        
+        // Filtrer les commandes actives (non livrées/annulées) pour la sélection
+        const activeOrders = orders.filter(order => 
+          !['LIVREE', 'ANNULEE', 'ECHOUEE'].includes(order.statut)
+        );
+        
+        setAvailableOrders(activeOrders);
+        
+        // Si aucun orderId dans l'URL mais qu'il y a des commandes actives
+        if (!orderId && activeOrders.length > 0) {
+          // Prendre la commande la plus récente
+          const latestOrder = activeOrders[0];
+          navigate(`/Trackorder/${latestOrder._id}`, { replace: true });
+          return;
+        }
+        
+        // Si aucun orderId et aucune commande active, montrer la sélection
+        if (!orderId && activeOrders.length === 0) {
+          // Montrer toutes les commandes pour sélection
+          setAvailableOrders(orders);
+          setShowOrderSelection(true);
+          setLoading(false);
+          return;
+        }
+      }
+    } catch (error) {
+      console.error('Erreur lors du chargement des commandes:', error);
+    }
+  }, [orderId, navigate]);
     
-  // Extraire fetchOrderData comme fonction du composant    
+  // Fonction fetchOrderData inchangée
   const fetchOrderData = useCallback(async () => {          
     if (!orderId) {          
       setError('Aucun ID de commande fourni');          
@@ -97,6 +137,13 @@ const TrackOrder = () => {
       setLoading(false);          
     }          
   }, [orderId, navigate]);    
+
+  // ✅ NOUVEAU: useEffect pour la logique de sélection automatique
+  useEffect(() => {
+    if (!orderId) {
+      fetchUserOrders();
+    }
+  }, [orderId, fetchUserOrders]);
   
   // Monitoring de l'état WebSocket et des données  
   useEffect(() => {  
@@ -138,7 +185,9 @@ const TrackOrder = () => {
     
   // useEffect pour le chargement initial    
   useEffect(() => {    
-    fetchOrderData();    
+    if (orderId) {
+      fetchOrderData();    
+    }
   }, [fetchOrderData]);    
       
   // Callback pour gérer les changements de statut de livraison      
@@ -157,7 +206,124 @@ const TrackOrder = () => {
         console.error('Erreur lors de la vérification d\'évaluation:', error);      
       }      
     }      
-  };      
+  };    
+
+  // ✅ NOUVEAU: Fonction pour sélectionner une commande
+  const handleOrderSelect = (selectedOrderId) => {
+    navigate(`/Trackorder/${selectedOrderId}`, { replace: true });
+    setShowOrderSelection(false);
+  };
+
+  // ✅ NOUVEAU: Fonction pour obtenir le statut en français
+  const getStatusInFrench = (status) => {
+    const statusMap = {
+      'CONFIRMEE': 'Confirmée',
+      'ASSIGNEE': 'Assignée',
+      'EN_COURS': 'En cours',
+      'LIVREE': 'Livrée',
+      'ANNULEE': 'Annulée',
+      'ECHOUEE': 'Échouée'
+    };
+    return statusMap[status] || status;
+  };
+
+  // ✅ NOUVEAU: Interface de sélection de commande
+  if (showOrderSelection) {
+    return (
+      <div className="track-wrapper">            
+        <div className="track-container">            
+          <div className="track-content">            
+            <div className="track-page-content">           
+              <div className="min-h-screen bg-gray-50">
+                <Title title="Sélectionner une Commande" />
+                
+                <div className="max-w-4xl mx-auto p-6">
+                  {availableOrders.length === 0 ? (
+                    <div className="bg-white rounded-lg shadow-md p-8 text-center">
+                      <div className="text-gray-500 mb-4">
+                        <svg className="w-16 h-16 mx-auto mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 11V7a4 4 0 00-8 0v4M5 9h14l1 12H4L5 9z" />
+                        </svg>
+                      </div>
+                      <h3 className="text-xl font-bold text-gray-900 mb-2">Aucune commande trouvée</h3>
+                      <p className="text-gray-600 mb-4">Vous n'avez actuellement aucune commande à suivre.</p>
+                      <button 
+                        onClick={() => navigate('/Command')}
+                        className="bg-blue-600 hover:bg-blue-700 text-white px-6 py-2 rounded-lg font-medium"
+                      >
+                        Passer une commande
+                      </button>
+                    </div>
+                  ) : (
+                    <div className="bg-white rounded-lg shadow-md">
+                      <div className="p-6 border-b border-gray-200">
+                        <h2 className="text-xl font-bold text-gray-900">Vos Commandes</h2>
+                        <p className="text-gray-600 mt-1">Sélectionnez une commande pour la suivre</p>
+                      </div>
+                      
+                      <div className="divide-y divide-gray-200">
+                        {availableOrders.map((order) => (
+                          <div 
+                            key={order._id}
+                            onClick={() => handleOrderSelect(order._id)}
+                            className="p-6 hover:bg-gray-50 cursor-pointer transition-colors"
+                          >
+                            <div className="flex justify-between items-start">
+                              <div className="flex-1">
+                                <div className="flex items-center space-x-3 mb-2">
+                                  <h3 className="font-semibold text-gray-900">
+                                    Commande #{order.numero_commande}
+                                  </h3>
+                                  <span className={`px-2 py-1 rounded-full text-xs font-medium ${
+                                    order.statut === 'CONFIRMEE' ? 'bg-yellow-100 text-yellow-800' :
+                                    order.statut === 'ASSIGNEE' ? 'bg-blue-100 text-blue-800' :
+                                    order.statut === 'EN_COURS' ? 'bg-green-100 text-green-800' :
+                                    order.statut === 'LIVREE' ? 'bg-gray-100 text-gray-800' :
+                                    'bg-red-100 text-red-800'
+                                  }`}>
+                                    {getStatusInFrench(order.statut)}
+                                  </span>
+                                </div>
+                                
+                                <div className="text-sm text-gray-600 space-y-1">
+                                  <p>
+                                    <span className="font-medium">Date:</span> {' '}
+                                    {new Date(order.date_commande).toLocaleDateString('fr-FR')}
+                                  </p>
+                                  <p>
+                                    <span className="font-medium">Montant:</span> {' '}
+                                    {order.montant_total?.toFixed(2)} MAD
+                                  </p>
+                                  {order.urgent && (
+                                    <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-red-100 text-red-800">
+                                      <svg className="w-3 h-3 mr-1" fill="currentColor" viewBox="0 0 20 20">
+                                        <path fillRule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
+                                      </svg>
+                                      Urgente
+                                    </span>
+                                  )}
+                                </div>
+                              </div>
+                              
+                              <div className="flex-shrink-0 ml-4">
+                                <svg className="w-5 h-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                                </svg>
+                              </div>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>            
+          </div>            
+        </div>            
+      </div>
+    );
+  }
           
   const orderNumber = orderData?.command?.numero_commande || 'N/A';          
           
@@ -238,12 +404,20 @@ const TrackOrder = () => {
           </div>          
           <h3 className="text-xl font-bold text-gray-900 mb-2">Erreur de chargement</h3>          
           <p className="text-gray-600 mb-4">{error}</p>          
-          <button           
-            onClick={() => window.location.reload()}           
-            className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded"          
-          >          
-            Réessayer          
-          </button>          
+          <div className="space-y-2">
+            <button           
+              onClick={() => window.location.reload()}           
+              className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded mr-2"          
+            >          
+              Réessayer          
+            </button>
+            <button           
+              onClick={() => navigate('/Trackorder')}           
+              className="bg-gray-600 hover:bg-gray-700 text-white px-4 py-2 rounded"          
+            >          
+              Sélectionner une autre commande          
+            </button>
+          </div>          
         </div>          
       </div>          
     );          
@@ -254,7 +428,13 @@ const TrackOrder = () => {
       <div className="min-h-screen bg-gray-50 flex justify-center items-center">          
         <div className="text-center">          
           <h3 className="text-xl font-bold text-gray-900 mb-2">Commande non trouvée</h3>          
-          <p className="text-gray-600">Aucune commande trouvée avec cet identifiant.</p>          
+          <p className="text-gray-600 mb-4">Aucune commande trouvée avec cet identifiant.</p>
+          <button           
+            onClick={() => navigate('/Trackorder')}           
+            className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded"          
+          >          
+            Sélectionner une commande          
+          </button>          
         </div>          
       </div>          
     );          
@@ -268,7 +448,20 @@ const TrackOrder = () => {
             <div className="min-h-screen bg-gray-50">          
               <Title title="Suivre ma Commande" />          
           
-              <div className="max-w-4xl mx-auto p-6">          
+              <div className="max-w-4xl mx-auto p-6">
+                {/* ✅ NOUVEAU: Bouton pour changer de commande */}
+                <div className="mb-4">
+                  <button
+                    onClick={() => navigate('/Trackorder')}
+                    className="text-blue-600 hover:text-blue-700 text-sm font-medium flex items-center"
+                  >
+                    <svg className="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 19l-7-7m0 0l7-7m-7 7h18" />
+                    </svg>
+                    Changer de commande
+                  </button>
+                </div>
+
                 <OrderStatusCard           
                   orderNumber={orderNumber}          
                   statusDescription={getStatusDescription()}          
@@ -295,7 +488,7 @@ const TrackOrder = () => {
                     isVisible={true}          
                     autoCenter={true}          
                     showRoute={true}          
-                    updateInterval={10000}      
+                    updateInterval={10000}    
                     onStatusChange={handleStatusChange}      
                   />          
                 )}          
