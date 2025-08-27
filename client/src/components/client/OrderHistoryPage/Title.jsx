@@ -7,7 +7,7 @@ const Title = ({ customerId }) => {
   useEffect(() => {
     const fetchTotalCommandes = async () => {
       try {
-        const response = await fetch(`http://localhost:5001/api/commands/customer/${customerId}/stats`);
+        const response = await fetch(`http://localhost:5000/api/commands/customer/${customerId}/stats`);
         const result = await response.json();
 
         if (result.success) {

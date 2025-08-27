@@ -13,7 +13,7 @@ const CancelOrderButton = ({ orderId, currentStatus, onCancelSuccess }) => {
   
     try {  
       // Utiliser l'endpoint correct pour l'annulation  
-      const response = await axios.put(`http://localhost:5001/api/commands/${orderId}/cancel`, {  
+      const response = await axios.put(`http://localhost:5000/api/commands/${orderId}/cancel`, {  
         raison_annulation: 'Annulation demandée par le client'  
       });  
   

@@ -10,7 +10,7 @@ import listePrixService from '../../services/listePrixService';
 import { createOrderFromSteps } from '../../services/orderService';        
 import './Command.css'; 
           
-const API_BASE_URL = process.env.REACT_APP_API_URL || 'http://localhost:5001';        
+const API_BASE_URL = process.env.REACT_APP_API_URL || 'http://localhost:5000';        
         
 const Command = () => {        
   const [currentStep, setCurrentStep] = useState(1);        

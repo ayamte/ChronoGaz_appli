@@ -41,7 +41,7 @@ export default function NextOrderMapPage() {
   const [isTracking, setIsTracking] = useState(false);
   const watchIdRef = useRef(null);
 
-  const API_BASE_URL = process.env.REACT_APP_API_URL || 'http://localhost:5001';
+  const API_BASE_URL = process.env.REACT_APP_API_URL || 'http://localhost:5000';
 
   const { subscribe, isConnected, updatePosition } = useWebSocket(true);
 

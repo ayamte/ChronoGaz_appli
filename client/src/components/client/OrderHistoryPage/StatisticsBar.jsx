@@ -16,7 +16,7 @@ const StatisticsBar = ({ customerId }) => {
   useEffect(() => {
     const fetchStats = async () => {
       try {
-        const res = await axios.get(`http://localhost:5001/api/commands/customer/${customerId}/stats`);
+        const res = await axios.get(`http://localhost:5000/api/commands/customer/${customerId}/stats`);
         if (res.data.success) {
           const rawStats = res.data.data.repartitionParStatut;
           
