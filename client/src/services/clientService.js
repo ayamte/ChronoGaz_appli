@@ -27,28 +27,37 @@ export const clientService = {
   },        
       
   // Créer un nouveau client (utilise l'endpoint inline conservé)  
-  create: async (clientData) => {        
-    try {        
-      const token = authService.getToken();        
-      const response = await fetch(`${API_BASE_URL}/api/customers`, {        
-        method: 'POST',        
-        headers: {        
-          'Authorization': `Bearer ${token}`,        
-          'Content-Type': 'application/json'        
-        },        
-        body: JSON.stringify(clientData)        
-      });        
-              
-      if (response.status === 401) {        
-        authService.logout();        
-        return { success: false, message: 'Session expirée' };        
-      }        
-              
-      return response.json();        
-    } catch (error) {        
-      console.error('Erreur lors de la création du client:', error);        
-      return { success: false, message: 'Erreur de connexion' };        
-    }        
+  create: async (clientData) => {          
+    try {          
+      const token = authService.getToken();          
+      const response = await fetch(`${API_BASE_URL}/api/admin/users`, {          
+        method: 'POST',          
+        headers: {          
+          'Authorization': `Bearer ${token}`,          
+          'Content-Type': 'application/json'          
+        },          
+        body: JSON.stringify({  
+          email: clientData.profile.email,  
+          password: 'TempPassword123', // Mot de passe temporaire  
+          role_code: 'CLIENT',  
+          type_personne: clientData.type_client,  
+          profile: clientData.profile,  
+          customer_info: {  
+            statut: clientData.statut  
+          }  
+        })          
+      });          
+                
+      if (response.status === 401) {          
+        authService.logout();          
+        return { success: false, message: 'Session expirée' };          
+      }          
+                
+      return response.json();          
+    } catch (error) {          
+      console.error('Erreur lors de la création du client:', error);          
+      return { success: false, message: 'Erreur de connexion' };          
+    }          
   },        
       
   // Mettre à jour un client (utilise l'endpoint inline conservé)  

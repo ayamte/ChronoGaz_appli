@@ -20,22 +20,12 @@ const menuItems = [
     icon: MdShoppingCart,  
     label: "Commander",  
     href: "/Command",  
-  },  
-  {  
-    icon: MdTrackChanges,  
-    label: "Suivi de Commande",  
-    href: "/Trackorder",  
-  },  
+  },    
   {  
     icon: MdHistory,  
     label: "Historique des Commandes",  
     href: "/Orderhistory",  
-  },  
-  {  
-    icon: MdRateReview,  
-    label: "Évaluation du Service",  
-    href: "/Serviceevaluation",  
-  },  
+  }
 ];  
       
 function SidebarNavigation({ userName = "Utilisateur", children }) {      

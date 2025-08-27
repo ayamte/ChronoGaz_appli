@@ -16,7 +16,6 @@ import {
 import "./gestionCamion.css"  
 import truckService from '../../../services/truckService' 
 import { employeeService } from '../../../services/employeeService'
-import SidebarNavigation from '../../../components/admin/Sidebar/Sidebar'
 
 export default function TruckManagement() {  
   const navigate = useNavigate()    
@@ -261,7 +260,7 @@ export default function TruckManagement() {
     
   return (    
     <div className="truck-management-layout">
-      <SidebarNavigation />    
+  
       <div className="truck-management-wrapper">    
         <div className="truck-management-container">    
           <div className="truck-management-content">    
@@ -439,7 +438,7 @@ export default function TruckManagement() {
       {/* Modal de détails */}    
       {isDetailModalOpen && selectedTruck && (    
         <div className="modal-overlay" onClick={() => setIsDetailModalOpen(false)}>    
-          <div className="modal-content detail-modal" onClick={(e) => e.stopPropagation()}>    
+          <div className="modal-content truck-detail-modal" onClick={(e) => e.stopPropagation()}>    
             <div className="modal-header">    
               <h2 className="modal-title">Détails du Camion - {selectedTruck.matricule}</h2>    
               <button className="modal-close" onClick={() => setIsDetailModalOpen(false)}>    
@@ -447,7 +446,7 @@ export default function TruckManagement() {
               </button>    
             </div>    
                 
-            <div className="detail-content">    
+            <div className="truck-detail-content">    
               {/* Image du camion */}    
               <div className="detail-image-section">    
                 {selectedTruck.image && selectedTruck.image.data ? (    
@@ -468,51 +467,51 @@ export default function TruckManagement() {
     
               {/* Informations détaillées */}    
               <div className="detail-info-grid">    
-                <div className="detail-section">    
+                <div className="truck-detail-section">    
                   <h3>Informations Générales</h3>    
-                  <div className="detail-item">    
-                    <span className="detail-label">Matricule:</span>    
-                    <span className="detail-value">{selectedTruck.matricule}</span>    
+                  <div className="truck-detail-item">    
+                    <span className="truck-detail-label">Matricule:</span>    
+                    <span className="truck-detail-value">{selectedTruck.matricule}</span>    
                   </div>    
-                  <div className="detail-item">    
-                    <span className="detail-label">Marque:</span>    
-                    <span className="detail-value">{selectedTruck.brand}</span>    
+                  <div className="truck-detail-item">    
+                    <span className="truck-detail-label">Marque:</span>    
+                    <span className="truck-detail-value">{selectedTruck.brand}</span>    
                   </div>    
-                  <div className="detail-item">    
-                    <span className="detail-label">Modèle:</span>    
-                    <span className="detail-value">{selectedTruck.modele}</span>    
+                  <div className="truck-detail-item">    
+                    <span className="truck-detail-label">Modèle:</span>    
+                    <span className="truck-detail-value">{selectedTruck.modele}</span>    
                   </div>    
-                  <div className="detail-item">    
-                    <span className="detail-label">Capacité:</span>    
-                    <span className="detail-value">{selectedTruck.capacite}</span>    
+                  <div className="truck-detail-item">    
+                    <span className="truck-detail-label">Capacité:</span>    
+                    <span className="truck-detail-value">{selectedTruck.capacite}</span>    
                   </div>    
-                  <div className="detail-item">    
-                    <span className="detail-label">Carburant:</span>    
-                    <span className="detail-value">{selectedTruck.fuel}</span>    
+                  <div className="truck-detail-item">    
+                    <span className="truck-detail-label">Carburant:</span>    
+                    <span className="truck-detail-value">{selectedTruck.fuel}</span>    
                   </div>    
-                  <div className="detail-item">    
-                    <span className="detail-label">Année:</span>    
-                    <span className="detail-value">{selectedTruck.anneecontruction}</span>    
+                  <div className="truck-detail-item">    
+                    <span className="truck-detail-label">Année:</span>    
+                    <span className="truck-detail-value">{selectedTruck.anneecontruction}</span>    
                   </div>    
-                  <div className="detail-item">    
-                    <span className="detail-label">Puissance fiscale:</span>    
-                    <span className="detail-value">{selectedTruck.puissancefiscale} CV</span>    
+                  <div className="truck-detail-item">    
+                    <span className="truck-detail-label">Puissance fiscale:</span>    
+                    <span className="truck-detail-value">{selectedTruck.puissancefiscale} CV</span>    
                   </div>    
-                  <div className="detail-item">    
-                    <span className="detail-label">GPS:</span>    
-                    <span className="detail-value">{selectedTruck.gps || 'Non spécifié'}</span>    
+                  <div className="truck-detail-item">    
+                    <span className="truck-detail-label">GPS:</span>    
+                    <span className="truck-detail-value">{selectedTruck.gps || 'Non spécifié'}</span>    
                   </div>    
-                  <div className="detail-item">    
-                    <span className="detail-label">Statut:</span>    
-                    <span className="detail-value">{getStatusBadge(selectedTruck.status)}</span>    
+                  <div className="truck-detail-item">    
+                    <span className="truck-detail-label">Statut:</span>    
+                    <span className="truck-detail-value">{getStatusBadge(selectedTruck.status)}</span>    
                   </div>    
                 </div>    
     
-                <div className="detail-section">    
+                <div className="truck-detail-section">    
                   <h3>Équipe Assignée</h3>    
-                  <div className="detail-item">    
-                    <span className="detail-label">Chauffeur:</span>    
-                    <span className="detail-value">    
+                  <div className="truck-detail-item">    
+                    <span className="truck-detail-label">Chauffeur:</span>    
+                    <span className="truck-detail-value">    
                       {selectedTruck.driver ? (    
                         <div className="employee-info">    
                           <Person className="employee-icon" />    
@@ -528,9 +527,9 @@ export default function TruckManagement() {
                       )}    
                     </span>    
                   </div>    
-                  <div className="detail-item">    
-                    <span className="detail-label">Accompagnant:</span>    
-                    <span className="detail-value">    
+                  <div className="truck-detail-item">    
+                    <span className="truck-detail-label">Accompagnant:</span>    
+                    <span className="truck-detail-value">    
                       {selectedTruck.accompagnant ? (    
                         <div className="employee-info">    
                           <Person className="employee-icon" />    
@@ -551,7 +550,7 @@ export default function TruckManagement() {
     
               {/* Description */}    
               {selectedTruck.description && (    
-                <div className="detail-section">    
+                <div className="truck-detail-section">    
                   <h3>Description</h3>    
                   <p className="detail-description">{selectedTruck.description}</p>    
                 </div>    

@@ -18,7 +18,7 @@
 /* Container principal */  
 .complete-profile-container {  
   min-height: 100vh;  
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);  
+  background: linear-gradient(135deg, var(--primary-light) 0%, var(--secondary-light) 100%);    
   display: flex;  
   align-items: center;  
   justify-content: center;  
@@ -76,12 +76,21 @@
   
 .user-type-button:hover {  
   border-color: var(--primary-blue);  
-  background: #f8faff;  
+  background: var(--primary-blue);  
+  color: var(--white);  
+}  
+  
+.user-type-button:hover .user-type-icon {  
+  color: var(--white);  
 }  
   
 .user-type-button.active {  
   border-color: var(--primary-blue);  
   background: var(--primary-blue);  
+  color: var(--white);  
+}  
+  
+.user-type-button.active .user-type-icon {  
   color: var(--white);  
 }  
   

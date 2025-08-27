@@ -17,7 +17,7 @@ export const redirectUserByRole = (role, userType) => {
       }  
       break;      
     case 'EMPLOYE':      
-      window.location.href = '/chauffeur/dailyroutepage';      
+      window.location.href = '/chauffeur/next-order';      
       break;      
     case 'EMPLOYE_MAGASIN':      
       window.location.href = '/magasin/gestion-stock';      

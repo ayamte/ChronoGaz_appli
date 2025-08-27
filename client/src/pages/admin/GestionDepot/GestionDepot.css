@@ -612,3 +612,19 @@ body.sidebar-collapsed .depot-management-wrapper {
   white-space: nowrap;  
   z-index: 1000;  
 }
+
+.depot-management-wrapper {  
+  margin-left: 256px;  
+  margin-top: 70px;  
+  min-height: calc(100vh - 70px);  
+  background-color: #f8f9fa;  
+  padding: 24px;  
+  transition: margin-left 0.3s ease, width 0.3s ease;  
+  width: calc(100vw - 256px);  
+}  
+  
+/* Quand la sidebar est collapsed */  
+body.sidebar-collapsed .depot-management-wrapper {  
+  margin-left: 64px;  
+  width: calc(100vw - 64px);  
+}

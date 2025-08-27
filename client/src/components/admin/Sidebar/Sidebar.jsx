@@ -38,6 +38,11 @@ const menuItems = [
   }, 
   {    
     icon: Users,    
+    label: "Gestion des fournisseurs",    
+    href: "/gestion-fournisseur",    
+  }, 
+  {    
+    icon: Users,    
     label: "Gestion des employés",    
     href: "/gestion-chauffeur",    
   },    
@@ -69,7 +74,7 @@ const menuItems = [
   }, 
   {    
     icon: MapPin,    
-    label: "Gestion des régions",    
+    label: "Gestion des villes",    
     href: "/gestionregion",    
   },    
   {    

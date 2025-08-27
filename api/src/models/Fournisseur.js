@@ -6,7 +6,7 @@ const FournisseurSchema = new mongoose.Schema({
   ice: { type: String, unique: true, sparse: true },  
   rc: String,  
   ville_rc: String,  
-  email: String,  
+  email: String,   
   actif: { type: Boolean, default: true },  
 }, { timestamps: true });  
   

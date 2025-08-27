@@ -8,7 +8,8 @@ import Dashboard from './pages/admin/Dashboard/Dashboard';
 import GestionCamion from './pages/admin/gestionCamion/gestionCamion'; 
 import AjouterCamion from './pages/admin/AjouterCamion/AjouterCamion';        
 import GestionClient from './pages/admin/gestionClient/gestionClient';        
-import GestionChauffeur from './pages/admin/GestionChauffeur/GestionChauffeur';    
+import GestionChauffeur from './pages/admin/GestionChauffeur/GestionChauffeur';
+import GestionFournisseur from './pages/admin/GestionFournisseur/GestionFournisseur';    
 import GestionRegion from './pages/admin/gestionRegion/gestionRegion';    
 
 import GestionBon from './pages/admin/gestionBon/gestionBon';        
@@ -247,6 +248,14 @@ function App() {
                   <GestionChauffeur />        
                 </ProtectedRoute>        
               }         
+            /> 
+            <Route         
+              path="/gestion-fournisseur"         
+              element={        
+                <ProtectedRoute allowedRoles={['ADMIN']}>        
+                  <GestionFournisseur />        
+                </ProtectedRoute>        
+              }         
             />        
         
             <Route         
@@ -326,7 +335,7 @@ function App() {
             <Route         
               path="/chauffeur/supplier-voucher"         
               element={        
-                <ProtectedRoute allowedRoles={['EMPLOYE']}>        
+                <ProtectedRoute allowedRoles={['EMPLOYE', 'EMPLOYE_MAGASIN']}>          
                   <SupplierVoucher />        
                 </ProtectedRoute>        
               }         

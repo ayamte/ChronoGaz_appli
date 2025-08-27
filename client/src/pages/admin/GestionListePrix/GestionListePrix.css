@@ -813,3 +813,19 @@
     margin: 10px;  
   }  
 }
+
+.listeprix-management-layout {  
+  margin-left: 256px;  
+  margin-top: 70px;  
+  min-height: calc(100vh - 70px);  
+  background: white;  
+  padding: 20px;  
+  transition: margin-left 0.3s ease, width 0.3s ease;  
+  width: calc(100vw - 256px);  
+}  
+  
+/* Quand la sidebar est collapsed */  
+body.sidebar-collapsed .listeprix-management-layout {  
+  margin-left: 64px;  
+  width: calc(100vw - 64px);  
+}

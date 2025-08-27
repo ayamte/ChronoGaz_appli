@@ -100,7 +100,8 @@ db.createCollection('employes', {
       properties: {  
         physical_user_id: { bsonType: 'objectId' },  
         matricule: { bsonType: 'string' },  
-        fonction: { enum: ['CHAUFFEUR', 'ACCOMPAGNANT', 'MAGASINIER', 'MANAGER', 'COMMERCIAL'] }  
+        fonction: { enum: ['CHAUFFEUR', 'ACCOMPAGNANT', 'MAGASINIER', 'MANAGER', 'COMMERCIAL'] },
+        depot_id: { bsonType: 'objectId' }  
       }  
     }  
   }  

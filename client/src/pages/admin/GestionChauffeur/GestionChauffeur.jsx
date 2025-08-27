@@ -8,6 +8,7 @@ import {
 } from "react-icons/md"      
 import "./GestionChauffeur.css"      
 import { employeeService } from '../../../services/employeeService'    
+import depotService from '../../../services/depotService' // Import ajouté
 import SidebarNavigation from '../../../components/admin/Sidebar/Sidebar';
     
 export default function GestionChauffeur() {      
@@ -29,8 +30,11 @@ export default function GestionChauffeur() {
     cnss: "",  
     matricule: "",  
     civilite: "M",
-    statut: "ACTIF"
+    statut: "ACTIF",
+    depot_id: "" // Champ ajouté pour l'affectation
   })
+
+  const [depots, setDepots] = useState([])
     
   // Charger les employés depuis l'API avec la structure corrigée
   useEffect(() => {    
@@ -43,25 +47,23 @@ export default function GestionChauffeur() {
             
         if (response.success) {    
           // CORRIGÉ: Utiliser la structure réelle de l'API (user_info au lieu de physical_user_id)
-          const transformedEmployees = response.data.map(employee => {
-            console.log('Employee structure:', employee);
-            
-            return {
-              id: employee.id, // Utiliser 'id' au lieu de '_id'     
-              nom: employee.user_info ?       
-                `${employee.user_info.first_name} ${employee.user_info.last_name}` : 'N/A',      
-              type: employee.fonction === 'CHAUFFEUR' ? 'Chauffeur' :     
-                    employee.fonction === 'ACCOMPAGNANT' ? 'Accompagnant' :     
-                    employee.fonction === 'MAGASINIER' ? 'Magasinier' : 'N/A',      
-              telephone: employee.user_info?.telephone_principal || 'N/A',      
-              email: employee.user_info?.email || 'N/A',      
-              cin: employee.cin || 'N/A',  
-              cnss: employee.cnss || 'N/A',  
+          const transformedEmployees = response.data.map(employee => ({  
+              id: employee.id,       
+              nom: employee.user_info ?         
+                `${employee.user_info.first_name} ${employee.user_info.last_name}` : 'N/A',        
+              type: employee.fonction === 'CHAUFFEUR' ? 'Chauffeur' :       
+                    employee.fonction === 'ACCOMPAGNANT' ? 'Accompagnant' :       
+                    employee.fonction === 'MAGASINIER' ? 'Magasinier' : 'N/A',        
+              telephone: employee.user_info?.telephone_principal || 'N/A',        
+              email: employee.user_info?.email || 'N/A',        
+              cin: employee.cin || 'N/A',    
+              cnss: employee.cnss || 'N/A',    
               matricule: employee.matricule || 'N/A',  
-              civilite: employee.user_info?.civilite || 'M',
-              statut: employee.statut || 'ACTIF'
-            };
-          });
+              civilite: employee.user_info?.civilite || 'M',  
+              statut: employee.statut || 'ACTIF',  
+              depot_id: employee.depot_id || '',  
+              depot_name: employee.depot_info?.short_name || 'Non affecté' // Si le backend populate le dépôt  
+            }));
           
           console.log('Transformed employees:', transformedEmployees);
           setChauffeurs(transformedEmployees);    
@@ -75,8 +77,18 @@ export default function GestionChauffeur() {
         setLoading(false);    
       }    
     };    
+
+    const fetchDepots = async () => {  
+      try {  
+        const response = await depotService.getAllDepots()  
+        setDepots(response.data || [])  
+      } catch (error) {  
+        console.error('Erreur chargement dépôts:', error)  
+      }  
+    }  
     
-    fetchEmployees();    
+    fetchEmployees()
+    fetchDepots()      
   }, []);    
     
   // Filtrer les chauffeurs selon le terme de recherche      
@@ -113,22 +125,23 @@ export default function GestionChauffeur() {
       const firstName = nameParts[0];  
       const lastName = nameParts.length > 1 ? nameParts.slice(1).join(' ') : nameParts[0];  
     
-      const employeeData = {      
-        fonction: formData.type === 'Chauffeur' ? 'CHAUFFEUR' :     
-                formData.type === 'Accompagnant' ? 'ACCOMPAGNANT' :     
-                formData.type === 'Magasinier' ? 'MAGASINIER' : 'CHAUFFEUR',      
-        profile: {      
-          first_name: firstName,      
-          last_name: lastName,      
-          civilite: formData.civilite,
-          telephone_principal: formData.telephone,      
-          email: formData.email,  
-          cin: formData.cin,
-          cnss: formData.cnss
-        },      
-        statut: formData.statut,
-        date_embauche: new Date()  
-      };      
+      const employeeData = {        
+        fonction: formData.type === 'Chauffeur' ? 'CHAUFFEUR' :       
+                formData.type === 'Accompagnant' ? 'ACCOMPAGNANT' :       
+                formData.type === 'Magasinier' ? 'MAGASINIER' : 'CHAUFFEUR',        
+        profile: {        
+          first_name: firstName,        
+          last_name: lastName,        
+          civilite: formData.civilite,  
+          telephone_principal: formData.telephone,        
+          email: formData.email,    
+          cin: formData.cin,  
+          cnss: formData.cnss  
+        },        
+        statut: formData.statut,  
+        date_embauche: new Date(),  
+        depot_id: formData.type === 'Magasinier' ? formData.depot_id : null // Seulement pour magasiniers  
+      };     
     
       const response = await employeeService.create(employeeData);      
             
@@ -150,7 +163,9 @@ export default function GestionChauffeur() {
             cnss: employee.cnss || 'N/A',    
             matricule: employee.matricule || 'N/A',
             civilite: employee.user_info?.civilite || 'M',
-            statut: employee.statut || 'ACTIF'
+            statut: employee.statut || 'ACTIF',
+            depot_id: employee.depot_id || '',
+            depot_name: employee.depot_info?.short_name || 'Non affecté'
           }));      
           setChauffeurs(transformedEmployees);      
         }      
@@ -165,7 +180,8 @@ export default function GestionChauffeur() {
           cnss: "",    
           matricule: "",
           civilite: "M",
-          statut: "ACTIF"
+          statut: "ACTIF",
+          depot_id: "" // Réinitialiser depot_id
         });      
       } else {      
         setError(response.message || "Erreur lors de l'ajout de l'employé");      
@@ -188,7 +204,8 @@ export default function GestionChauffeur() {
       cnss: "",  
       matricule: "",
       civilite: "M",
-      statut: "ACTIF"
+      statut: "ACTIF",
+      depot_id: "" // Réinitialiser depot_id
     })      
     setIsAddDialogOpen(true)      
   }      
@@ -217,7 +234,8 @@ export default function GestionChauffeur() {
           cin: formData.cin,
           cnss: formData.cnss
         },
-        statut: formData.statut
+        statut: formData.statut,
+        depot_id: formData.type === 'Magasinier' ? formData.depot_id : null // Inclure depot_id pour modification
       };      
     
       const response = await employeeService.update(editingChauffeur.id, employeeData);      
@@ -240,7 +258,9 @@ export default function GestionChauffeur() {
             cnss: employee.cnss || 'N/A',    
             matricule: employee.matricule || 'N/A',
             civilite: employee.user_info?.civilite || 'M',
-            statut: employee.statut || 'ACTIF'
+            statut: employee.statut || 'ACTIF',
+            depot_id: employee.depot_id || '',
+            depot_name: employee.depot_info?.short_name || 'Non affecté'
           }));      
           setChauffeurs(transformedEmployees);      
         }      
@@ -256,7 +276,8 @@ export default function GestionChauffeur() {
           cnss: "",    
           matricule: "",
           civilite: "M",
-          statut: "ACTIF"
+          statut: "ACTIF",
+          depot_id: "" // Réinitialiser depot_id
         });      
       } else {      
         setError(response.message || "Erreur lors de la modification de l'employé");      
@@ -280,7 +301,8 @@ export default function GestionChauffeur() {
       cnss: chauffeur.cnss,  
       matricule: chauffeur.matricule,
       civilite: chauffeur.civilite || "M",
-      statut: chauffeur.statut || "ACTIF"
+      statut: chauffeur.statut || "ACTIF",
+      depot_id: chauffeur.depot_id || "" // Inclure depot_id pour modification
     })      
     setIsEditDialogOpen(true)      
   }      
@@ -337,9 +359,7 @@ export default function GestionChauffeur() {
           <div className="chauffeur-management-content">      
             {/* En-tête */}
             <div className="page-header">      
-              <h1 className="page-title">Gestion des Employés
-
-</h1>        
+              <h1 className="page-title">Gestion des Employés</h1>        
               <p className="page-subtitle">Gérez votre équipe de chauffeurs, accompagnants et magasiniers</p>        
             </div>        
       
@@ -429,18 +449,18 @@ export default function GestionChauffeur() {
               <div className="table-content">        
                 <div className="table-container">        
                   <table className="chauffeurs-table">        
-                    <thead>        
-                      <tr>        
-                        <th>Nom</th>        
-                        <th>Type</th>        
-                        <th>Téléphone</th>        
-                        <th>Email</th>        
-                        <th>CIN</th>        
-                        <th>CNSS</th>        
-                        <th>Matricule</th>        
-                        <th>Actions</th>        
-                      </tr>        
-                    </thead>        
+                    <thead>          
+                      <tr>          
+                        <th>Nom</th>          
+                        <th>Type</th>          
+                        <th>Téléphone</th>          
+                        <th>Email</th>          
+                        <th>CIN</th>          
+                        <th>CNSS</th>          
+                        <th>Matricule</th>  
+                        <th>Actions</th>          
+                      </tr>          
+                    </thead>       
                     <tbody>        
                       {filteredChauffeurs.map((chauffeur, index) => (        
                         <tr key={chauffeur.id || `employee-${index}`}>        
@@ -449,8 +469,8 @@ export default function GestionChauffeur() {
                           <td>{chauffeur.telephone}</td>        
                           <td>{chauffeur.email}</td>        
                           <td>{chauffeur.cin}</td>        
-                          <td>{chauffeur.cnss}</td>        
-                          <td className="font-mono">{chauffeur.matricule}</td>        
+                          <td>{chauffeur.cnss}</td>
+                          <td className="font-mono">{chauffeur.matricule}</td>
                           <td>        
                             <div className="action-buttons">        
                               <button         
@@ -605,7 +625,27 @@ export default function GestionChauffeur() {
                           <option value="SUSPENDU">Suspendu</option>          
                           <option value="EN_CONGE">En congé</option>          
                         </select>          
-                      </div>      
+                      </div>
+
+                      {/* Affectation dépôt - seulement pour les magasiniers */}
+                      {formData.type === "Magasinier" && (
+                        <div className="form-group">
+                          <label htmlFor="depot-select" className="form-label">Dépôt d'affectation</label>
+                          <select
+                            id="depot-select"
+                            value={formData.depot_id}
+                            onChange={(e) => handleInputChange("depot_id", e.target.value)}
+                            className="form-select"
+                          >
+                            <option value="">Sélectionner un dépôt</option>
+                            {depots.map((depot) => (
+                              <option key={depot._id} value={depot._id}>
+                                {depot.short_name} - {depot.reference}
+                              </option>
+                            ))}
+                          </select>
+                        </div>
+                      )}
                     </div>        
         
                     <div className="form-actions">        
@@ -634,152 +674,172 @@ export default function GestionChauffeur() {
               <div className="modal-overlay" onClick={() => setIsEditDialogOpen(false)}>        
                 <div className="modal-content" onClick={(e) => e.stopPropagation()}>        
                   <div className="modal-header">        
-                    <h3 className="modal-title">Modifier l'Employé</h3>        
-                    <button         
-                      className="modal-close"        
-                      onClick={() => setIsEditDialogOpen(false)}        
-                    >        
-                      <X className="close-icon" />        
-                    </button>        
-                  </div>        
-                  <form onSubmit={handleEditSubmit} className="modal-form">        
-                    <div className="form-grid">        
-                      <div className="form-group">        
-                        <label htmlFor="edit-nom" className="form-label">Nom complet *</label>        
-                        <input        
-                          id="edit-nom"        
-                          type="text"        
-                          placeholder="Ex: Ahmed Alami"        
-                          value={formData.nom}        
-                          onChange={(e) => handleInputChange("nom", e.target.value)}        
-                          className="form-input"        
-                          required        
-                        />        
-                      </div>        
-        
-                      <div className="form-group">        
-                        <label htmlFor="edit-type" className="form-label">Type *</label>        
-                        <select        
-                          id="edit-type"        
-                          value={formData.type}        
-                          onChange={(e) => handleInputChange("type", e.target.value)}        
-                          className="form-select"        
-                          required        
-                        >        
-                          <option value="">Sélectionner un type</option>        
-                          <option value="Chauffeur">Chauffeur</option>        
-                          <option value="Accompagnant">Accompagnant</option>        
-                          <option value="Magasinier">Magasinier</option>        
-                        </select>        
-                      </div>        
-        
-                      <div className="form-group">        
-                        <label htmlFor="edit-telephone" className="form-label">Téléphone *</label>        
-                        <input        
-                          id="edit-telephone"        
-                          type="tel"        
-                          placeholder="Ex: 0612345678"        
-                          value={formData.telephone}        
-                          onChange={(e) => handleInputChange("telephone", e.target.value)}        
-                          className="form-input"        
-                          required        
-                        />        
-                      </div>        
-        
-                      <div className="form-group">        
-                        <label htmlFor="edit-email" className="form-label">Email *</label>        
-                        <input        
-                          id="edit-email"        
-                          type="email"        
-                          placeholder="Ex: ahmed.alami@chronogaz.ma"        
-                          value={formData.email}        
-                          onChange={(e) => handleInputChange("email", e.target.value)}        
-                          className="form-input"        
-                          required        
-                        />        
-                      </div>        
-        
-                      <div className="form-group">        
-                        <label htmlFor="edit-cin" className="form-label">CIN *</label>        
-                        <input        
-                          id="edit-cin"        
-                          type="text"        
-                          placeholder="Ex: AB123456"        
-                          value={formData.cin}        
-                          onChange={(e) => handleInputChange("cin", e.target.value)}        
-                          className="form-input"        
-                          required        
-                        />        
-                      </div>        
-        
-                      <div className="form-group">        
-                        <label htmlFor="edit-cnss" className="form-label">CNSS *</label>        
-                        <input        
-                          id="edit-cnss"        
-                          type="text"        
-                          placeholder="Ex: 123456789"        
-                          value={formData.cnss}        
-                          onChange={(e) => handleInputChange("cnss", e.target.value)}        
-                          className="form-input"        
-                          required        
-                        />        
-                      </div>        
-  
-                      <div className="form-group">        
-                        <label htmlFor="edit-civilite" className="form-label">Civilité *</label>        
-                        <select        
-                          id="edit-civilite"        
-                          value={formData.civilite}        
-                          onChange={(e) => handleInputChange("civilite", e.target.value)}        
-                          className="form-select"        
-                          required        
-                        >        
-                          <option value="M">M.</option>        
-                          <option value="Mme">Mme</option>        
-                          <option value="Mlle">Mlle</option>        
-                        </select>        
-                      </div>        
-  
-                      <div className="form-group">        
-                        <label htmlFor="edit-statut" className="form-label">Statut *</label>        
-                        <select        
-                          id="edit-statut"        
-                          value={formData.statut}        
-                          onChange={(e) => handleInputChange("statut", e.target.value)}        
-                          className="form-select"        
-                          required        
-                        >        
-                          <option value="ACTIF">Actif</option>        
-                          <option value="INACTIF">Inactif</option>        
-                          <option value="SUSPENDU">Suspendu</option>        
-                          <option value="EN_CONGE">En congé</option>        
-                        </select>        
+                    <h3 className="modal-title">Modifier l'Employé</h3>          
+                    <button           
+                      className="modal-close"          
+                      onClick={() => setIsEditDialogOpen(false)}          
+                    >          
+                      <X className="close-icon" />          
+                    </button>          
+                  </div>          
+                  <form onSubmit={handleEditSubmit} className="modal-form">          
+                    <div className="form-grid">          
+                      <div className="form-group">          
+                        <label htmlFor="edit-nom" className="form-label">Nom complet *</label>          
+                        <input          
+                          id="edit-nom"          
+                          type="text"          
+                          placeholder="Ex: Ahmed Alami"          
+                          value={formData.nom}          
+                          onChange={(e) => handleInputChange("nom", e.target.value)}          
+                          className="form-input"          
+                          required          
+                        />          
+                      </div>          
+          
+                      <div className="form-group">          
+                        <label htmlFor="edit-type" className="form-label">Type *</label>          
+                        <select          
+                          id="edit-type"          
+                          value={formData.type}          
+                          onChange={(e) => handleInputChange("type", e.target.value)}          
+                          className="form-select"          
+                          required          
+                        >          
+                          <option value="">Sélectionner un type</option>          
+                          <option value="Chauffeur">Chauffeur</option>          
+                          <option value="Accompagnant">Accompagnant</option>          
+                          <option value="Magasinier">Magasinier</option>          
+                        </select>          
+                      </div>          
+          
+                      <div className="form-group">          
+                        <label htmlFor="edit-telephone" className="form-label">Téléphone *</label>          
+                        <input          
+                          id="edit-telephone"          
+                          type="tel"          
+                          placeholder="Ex: 0612345678"          
+                          value={formData.telephone}          
+                          onChange={(e) => handleInputChange("telephone", e.target.value)}          
+                          className="form-input"          
+                          required          
+                        />          
+                      </div>          
+          
+                      <div className="form-group">          
+                        <label htmlFor="edit-email" className="form-label">Email *</label>          
+                        <input          
+                          id="edit-email"          
+                          type="email"          
+                          placeholder="Ex: ahmed.alami@chronogaz.ma"          
+                          value={formData.email}          
+                          onChange={(e) => handleInputChange("email", e.target.value)}          
+                          className="form-input"          
+                          required          
+                        />          
+                      </div>          
+          
+                      <div className="form-group">          
+                        <label htmlFor="edit-cin" className="form-label">CIN *</label>          
+                        <input          
+                          id="edit-cin"          
+                          type="text"          
+                          placeholder="Ex: AB123456"          
+                          value={formData.cin}          
+                          onChange={(e) => handleInputChange("cin", e.target.value)}          
+                          className="form-input"          
+                          required          
+                        />          
+                      </div>          
+          
+                      <div className="form-group">          
+                        <label htmlFor="edit-cnss" className="form-label">CNSS *</label>          
+                        <input          
+                          id="edit-cnss"          
+                          type="text"          
+                          placeholder="Ex: 123456789"          
+                          value={formData.cnss}          
+                          onChange={(e) => handleInputChange("cnss", e.target.value)}          
+                          className="form-input"          
+                          required          
+                        />          
+                      </div>          
+    
+                      <div className="form-group">          
+                        <label htmlFor="edit-civilite" className="form-label">Civilité *</label>          
+                        <select          
+                          id="edit-civilite"          
+                          value={formData.civilite}          
+                          onChange={(e) => handleInputChange("civilite", e.target.value)}          
+                          className="form-select"          
+                          required          
+                        >          
+                          <option value="M">M.</option>          
+                          <option value="Mme">Mme</option>          
+                          <option value="Mlle">Mlle</option>          
+                        </select>          
+                      </div>          
+    
+                      <div className="form-group">          
+                        <label htmlFor="edit-statut" className="form-label">Statut *</label>          
+                        <select          
+                          id="edit-statut"          
+                          value={formData.statut}          
+                          onChange={(e) => handleInputChange("statut", e.target.value)}          
+                          className="form-select"          
+                          required          
+                        >          
+                          <option value="ACTIF">Actif</option>          
+                          <option value="INACTIF">Inactif</option>          
+                          <option value="SUSPENDU">Suspendu</option>          
+                          <option value="EN_CONGE">En congé</option>          
+                        </select>          
                       </div>  
-                    </div>        
-        
-                    <div className="form-actions">        
-                      <button         
-                        type="button"         
-                        className="cancel-button"         
-                        onClick={() => setIsEditDialogOpen(false)}        
-                      >        
-                        Annuler        
-                      </button>        
-                      <button         
-                        type="submit"         
-                        className="submit-button"         
-                        disabled={isLoading}        
-                      >        
-                        {isLoading ? "Modification..." : "Sauvegarder"}        
-                      </button>        
-                    </div>        
-                  </form>        
-                </div>        
-              </div>        
-            )}        
-          </div>        
-        </div>        
-      </div>        
-    </div>        
-  )        
+  
+                      {/* Affectation dépôt - seulement pour les magasiniers */}  
+                      {formData.type === "Magasinier" && (  
+                        <div className="form-group">  
+                          <label htmlFor="edit-depot-select" className="form-label">Dépôt d'affectation</label>  
+                          <select  
+                            id="edit-depot-select"  
+                            value={formData.depot_id}  
+                            onChange={(e) => handleInputChange("depot_id", e.target.value)}  
+                            className="form-select"  
+                          >  
+                            <option value="">Sélectionner un dépôt</option>  
+                            {depots.map((depot) => (  
+                              <option key={depot._id} value={depot._id}>  
+                                {depot.short_name} - {depot.reference}  
+                              </option>  
+                            ))}  
+                          </select>  
+                        </div>  
+                      )}  
+                    </div>          
+          
+                    <div className="form-actions">          
+                      <button           
+                        type="button"           
+                        className="cancel-button"           
+                        onClick={() => setIsEditDialogOpen(false)}          
+                      >          
+                        Annuler          
+                      </button>          
+                      <button           
+                        type="submit"           
+                        className="submit-button"           
+                        disabled={isLoading}          
+                      >          
+                        {isLoading ? "Modification..." : "Sauvegarder"}          
+                      </button>          
+                    </div>          
+                  </form>          
+                </div>          
+              </div>          
+            )}          
+          </div>          
+        </div>          
+      </div>          
+    </div>          
+  )          
 }

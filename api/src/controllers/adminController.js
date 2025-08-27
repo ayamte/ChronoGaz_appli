@@ -151,17 +151,31 @@ const getEmployees = async (req, res) => {
   }  
 };  
 
-const createUser = async (req, res) => {    
-  try {    
-    const {    
-      email,    
-      password,    
-      role_code,    
-      type_personne,    
-      profile,    
-      customer_info,    
-      employee_info    
-    } = req.body;    
+const createUser = async (req, res) => {      
+  try {      
+    const {      
+      email,      
+      password,      
+      role_code,      
+      type_personne,      
+      profile,      
+      customer_info,      
+      employee_info      
+    } = req.body;      
+  
+    // 🔍 LOGS DE DEBUG  
+    console.log('📊 Données reçues dans createUser:', {   
+      email,   
+      role_code,   
+      type_personne,   
+      profile   
+    });  
+    console.log('🏠 Champs adresse reçus:', {   
+      street: profile?.street,   
+      city_id: profile?.city_id,  
+      numappt: profile?.numappt,  
+      numimmeuble: profile?.numimmeuble   
+    }); 
     
     if (!email || !password || !role_code || !type_personne) {    
       return res.status(400).json({    
@@ -243,19 +257,20 @@ const createUser = async (req, res) => {
       await physicalUser.save();    
   
       // Créer l'adresse principale avec Casablanca par défaut
-      if (profile.adresse_principale) {    
-        // ✅ Récupérer l'ObjectId de Casablanca
-        const casablancaCity = await City.findOne({ name: 'Casablanca' });
-        
-        const newAddress = new Address({    
-          user_id: newUser._id,
-          street: profile.adresse_principale,    
-          city_id: casablancaCity?._id, // ✅ Utiliser Casablanca par défaut
-          latitude: profile.latitude || null,
-          longitude: profile.longitude || null,
-          type_adresse: 'DOMICILE',    
-          is_principal: true    
-        });    
+      if (profile.street && profile.city_id) {  
+        const newAddress = new Address({  
+          user_id: newUser._id,  
+          street: profile.street,  
+          numappt: profile.numappt,  
+          numimmeuble: profile.numimmeuble,  
+          quartier: profile.quartier,  
+          postal_code: profile.postal_code,  
+          city_id: profile.city_id,  
+          latitude: profile.latitude || null,  
+          longitude: profile.longitude || null,  
+          type_adresse: 'DOMICILE',  
+          is_principal: true  
+        });  
         const savedAddress = await newAddress.save();    
           
         const userAddress = new UserAddress({    
@@ -324,18 +339,19 @@ const createUser = async (req, res) => {
       await moralUser.save();    
   
       // Créer l'adresse principale avec Casablanca par défaut
-      if (profile.adresse_principale) {    
-        // ✅ Récupérer l'ObjectId de Casablanca
-        const casablancaCity = await City.findOne({ name: 'Casablanca' });
-        
-        const newAddress = new Address({    
-          user_id: newUser._id,
-          street: profile.adresse_principale,    
-          city_id: casablancaCity?._id, // ✅ Utiliser Casablanca par défaut
-          latitude: profile.latitude || null,
-          longitude: profile.longitude || null,
-          type_adresse: 'SIÈGE SOCIAL',    
-          is_principal: true    
+      if (profile.street && profile.city_id) {  
+        const newAddress = new Address({  
+          user_id: newUser._id,  
+          street: profile.street,  
+          numappt: profile.numappt,  
+          numimmeuble: profile.numimmeuble,  
+          quartier: profile.quartier,  
+          postal_code: profile.postal_code,  
+          city_id: profile.city_id,  
+          latitude: profile.latitude || null,  
+          longitude: profile.longitude || null,  
+          type_adresse: 'SIÈGE SOCIAL',  
+          is_principal: true  
         });    
         const savedAddress = await newAddress.save();    
           

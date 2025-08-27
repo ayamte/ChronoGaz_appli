@@ -1,9 +1,20 @@
+:root {  
+  --primary-color: #3b82f6;  
+  --primary-hover: #2563eb;  
+  --gray-50: #f8fafc;  
+  --gray-100: #f1f5f9;  
+  --white: #ffffff;  
+} 
 /* Layout principal */  
 .um-management-layout {  
-  min-height: 100vh;  
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);  
-  padding: 20px;  
-}  
+  margin-left: 256px;  
+  margin-top: 70px;  
+  min-height: calc(100vh - 70px);  
+  background: white; /* ✅ Changé en blanc au lieu du gradient */  
+  padding: 0; /* ✅ Supprimé le padding pour éviter le double padding */  
+  transition: margin-left 0.3s ease, width 0.3s ease;  
+  width: calc(100vw - 256px);  
+}   
   
 .um-management-wrapper {  
   max-width: 1400px;  
@@ -767,4 +778,17 @@
   border: 5px solid transparent;  
   border-top-color: #2d3748;  
   z-index: 1000;  
+}
+
+
+  
+.um-management-wrapper {  
+  max-width: 1400px;  
+  margin: 0 auto;  
+  padding: 20px; /* ✅ Le padding reste uniquement ici */  
+}
+/* Quand la sidebar est collapsed */  
+body.sidebar-collapsed .um-management-layout {  
+  margin-left: 64px;  
+  width: calc(100vw - 64px);  
 }

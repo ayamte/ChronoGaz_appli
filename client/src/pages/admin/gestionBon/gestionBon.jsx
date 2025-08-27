@@ -1,588 +1,497 @@
-import { useState } from "react"  
+import { useState, useEffect } from "react"
 import {   
   MdSearch as Search,   
-  MdAdd as Plus,   
-  MdEdit as Edit,  
-  MdDelete as Delete,  
-  MdClose as X,  
-  MdAttachFile as AttachFile  
-} from "react-icons/md"  
-import "./gestionBon.css"  
-  
-// Données d'exemple pour les bons des fournisseurs  
-const supplierVouchersData = [  
-  {  
-    id: 1,  
-    date: "2024-01-15",  
-    camion: "AB-123-CD",  
-    chauffeur: "Jean Dupont",  
-    typeProduit: "Butane",  
-    quantite: 500,  
-    prixUnitaire: 12.50,  
-    montantTotal: 6250.00,  
-    bonUrl: "/documents/bon-001.pdf"  
-  },  
-  {  
-    id: 2,  
-    date: "2024-01-16",  
-    camion: "EF-456-GH",  
-    chauffeur: "Ahmed Benali",  
-    typeProduit: "Propane",  
-    quantite: 750,  
-    prixUnitaire: 11.80,  
-    montantTotal: 8850.00,  
-    bonUrl: "/documents/bon-002.pdf"  
-  },  
-  {  
-    id: 3,  
-    date: "2024-01-17",  
-    camion: "IJ-789-KL",  
-    chauffeur: "Mohamed Alami",  
-    typeProduit: "Butane",  
-    quantite: 300,  
-    prixUnitaire: 12.50,  
-    montantTotal: 3750.00,  
-    bonUrl: "/documents/bon-003.pdf"  
-  },  
-  {  
-    id: 4,  
-    date: "2024-01-18",  
-    camion: "MN-012-OP",  
-    chauffeur: "Fatima Zahra",  
-    typeProduit: "Propane",  
-    quantite: 600,  
-    prixUnitaire: 11.80,  
-    montantTotal: 7080.00,  
-    bonUrl: "/documents/bon-004.pdf"  
-  },  
-]  
-  
-export default function SupplierVoucherManagement() {  
-  const [searchTerm, setSearchTerm] = useState("")  
-  const [isAddDialogOpen, setIsAddDialogOpen] = useState(false)  
-  const [isEditDialogOpen, setIsEditDialogOpen] = useState(false)  
-  const [supplierVouchers, setSupplierVouchers] = useState(supplierVouchersData)  
-  const [editingVoucher, setEditingVoucher] = useState(null)  
-  const [formData, setFormData] = useState({  
-    date: "",  
-    camion: "",  
-    chauffeur: "",  
-    typeProduit: "",  
-    quantite: "",  
-    prixUnitaire: "",  
-    bonFile: null  
-  })  
-  
-  // Filtrer les bons selon le terme de recherche  
-  const filteredVouchers = supplierVouchers.filter(  
-    (voucher) =>  
-      voucher.camion.toLowerCase().includes(searchTerm.toLowerCase()) ||  
-      voucher.chauffeur.toLowerCase().includes(searchTerm.toLowerCase()) ||  
-      voucher.typeProduit.toLowerCase().includes(searchTerm.toLowerCase()) ||  
-      voucher.date.includes(searchTerm)  
-  )  
-  
-  const handleInputChange = (field, value) => {  
-    setFormData((prev) => ({  
-      ...prev,  
-      [field]: value,  
-    }))  
-  }  
-  
-  const handleFileChange = (e) => {  
-    const file = e.target.files[0]  
-    setFormData((prev) => ({  
-      ...prev,  
-      bonFile: file  
-    }))  
-  }  
-  
-  const calculateTotal = () => {  
-    const quantite = parseFloat(formData.quantite) || 0  
-    const prixUnitaire = parseFloat(formData.prixUnitaire) || 0  
-    return quantite * prixUnitaire  
-  }  
-  
-  const handleAddSubmit = (e) => {  
-    e.preventDefault()  
-    const montantTotal = calculateTotal()  
-    const newVoucher = {  
-      id: supplierVouchers.length + 1,  
-      date: formData.date,  
-      camion: formData.camion,  
-      chauffeur: formData.chauffeur,  
-      typeProduit: formData.typeProduit,  
-      quantite: parseFloat(formData.quantite),  
-      prixUnitaire: parseFloat(formData.prixUnitaire),  
-      montantTotal: montantTotal,  
-      bonUrl: formData.bonFile ? `/documents/bon-${supplierVouchers.length + 1}.pdf` : null  
-    }  
-    setSupplierVouchers([...supplierVouchers, newVoucher])  
-    console.log("Nouveau bon:", newVoucher)  
-  
-    // Réinitialiser le formulaire et fermer le modal  
-    setFormData({  
-      date: "",  
-      camion: "",  
-      chauffeur: "",  
-      typeProduit: "",  
-      quantite: "",  
-      prixUnitaire: "",  
-      bonFile: null  
-    })  
-    setIsAddDialogOpen(false)  
-  }  
-  
-  const handleEditSubmit = (e) => {  
-    e.preventDefault()  
-    const montantTotal = calculateTotal()  
-    const updatedVouchers = supplierVouchers.map(voucher =>   
-      voucher.id === editingVoucher.id ? {  
-        ...editingVoucher,  
-        date: formData.date,  
-        camion: formData.camion,  
-        chauffeur: formData.chauffeur,  
-        typeProduit: formData.typeProduit,  
-        quantite: parseFloat(formData.quantite),  
-        prixUnitaire: parseFloat(formData.prixUnitaire),  
-        montantTotal: montantTotal,  
-        bonUrl: formData.bonFile ? `/documents/bon-${editingVoucher.id}.pdf` : voucher.bonUrl  
-      } : voucher  
-    )  
-    setSupplierVouchers(updatedVouchers)  
-    console.log("Bon modifié:", { ...editingVoucher, ...formData })  
-  
-    // Réinitialiser et fermer  
-    setFormData({  
-      date: "",  
-      camion: "",  
-      chauffeur: "",  
-      typeProduit: "",  
-      quantite: "",  
-      prixUnitaire: "",  
-      bonFile: null  
-    })  
-    setEditingVoucher(null)  
-    setIsEditDialogOpen(false)  
-  }  
-  
-  const handleEdit = (voucher) => {  
-    setEditingVoucher(voucher)  
-    setFormData({  
-      date: voucher.date,  
-      camion: voucher.camion,  
-      chauffeur: voucher.chauffeur,  
-      typeProduit: voucher.typeProduit,  
-      quantite: voucher.quantite.toString(),  
-      prixUnitaire: voucher.prixUnitaire.toString(),  
-      bonFile: null  
-    })  
-    setIsEditDialogOpen(true)  
-  }  
-  
-  const handleDelete = (voucherId) => {  
-    if (window.confirm("Êtes-vous sûr de vouloir supprimer ce bon ?")) {  
-      const updatedVouchers = supplierVouchers.filter(voucher => voucher.id !== voucherId)  
-      setSupplierVouchers(updatedVouchers)  
-      console.log("Bon supprimé:", voucherId)  
-    }  
-  }  
-  
-  const handleAddClick = () => {  
-    // Réinitialiser complètement le formulaire pour l'ajout  
-    setFormData({  
-      date: "",  
-      camion: "",  
-      chauffeur: "",  
-      typeProduit: "",  
-      quantite: "",  
-      prixUnitaire: "",  
-      bonFile: null  
-    })  
-    setIsAddDialogOpen(true)  
-  }  
-  
-  const handleViewBon = (bonUrl) => {  
-    if (bonUrl) {  
-      window.open(bonUrl, '_blank')  
-    }  
-  }  
-  
-  return (  
-    <div className="supplier-management-layout">  
+  MdDelete as Delete,
+  MdClose as X,
+  MdAttachFile as AttachFile,
+  MdVisibility as Eye
+} from "react-icons/md"
+import blFrsService from "../../../services/blFrsService"
+import "./gestionBon.css"
+
+export default function SupplierVoucherManagement() {
+  const [searchTerm, setSearchTerm] = useState("")
+  const [supplierVouchers, setSupplierVouchers] = useState([])
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState(null)
+  const [isDetailModalOpen, setIsDetailModalOpen] = useState(false)
+  const [selectedVoucher, setSelectedVoucher] = useState(null)
+
+  // Charger les données réelles au montage du composant
+  useEffect(() => {
+    console.log("🚀 Composant monté - Chargement des données BLFRS")
+    loadBLFRS()
+  }, [])
+
+  const loadBLFRS = async () => {
+    try {
+      console.log("📡 Début du chargement des BLFRS...")
+      setLoading(true)
+      setError(null)
+      
+      console.log("🔄 Appel de blFrsService.getAllBLFRS()")
+      const response = await blFrsService.getAllBLFRS()
+      
+      console.log("📥 Réponse reçue:", response)
+      console.log("✅ Success:", response?.success)
+      console.log("📊 Data:", response?.data)
+      console.log("📈 Nombre de bons:", response?.data?.length)
+      
+      if (response.success) {
+        console.log("✅ Données chargées avec succès")
+        setSupplierVouchers(response.data)
         
-      <div className="supplier-management-wrapper">  
-        <div className="supplier-management-container">  
-          <div className="supplier-management-content">  
-            {/* En-tête */}  
-            <div className="supplier-page-header">  
-              <h1 className="supplier-page-title">Gestion des Bons des Fournisseurs</h1>  
-              <p className="supplier-page-subtitle">Gérez les bons de livraison des fournisseurs</p>  
-            </div>  
-  
-            {/* Bouton Ajouter Bon */}  
-            <div className="supplier-action-section">  
-              <button className="supplier-add-button" onClick={handleAddClick}>  
-                <Plus className="supplier-button-icon" />  
-                Ajouter Bon  
-              </button>  
-            </div>  
-  
-            {/* Barre de recherche */}  
-            <div className="supplier-search-section">  
-              <div className="supplier-search-container">  
-                <Search className="supplier-search-icon" />  
-                <input  
-                  type="text"  
-                  placeholder="Rechercher par camion, chauffeur, produit ou date..."  
-                  value={searchTerm}  
-                  onChange={(e) => setSearchTerm(e.target.value)}  
-                  className="supplier-search-input"  
-                />  
-              </div>  
-            </div>  
-  
-            {/* Tableau */}  
-            <div className="supplier-table-card">  
-              <div className="supplier-table-header">  
-                <h3 className="supplier-table-title">Liste des Bons des Fournisseurs</h3>  
-              </div>  
-              <div className="supplier-table-content">  
-                <div className="supplier-table-container">  
-                  <table className="supplier-vouchers-table">  
-                    <thead>  
-                      <tr>  
-                        <th>Date</th>  
-                        <th>Camion</th>  
-                        <th>Chauffeur</th>  
-                        <th>Type du produit</th>  
-                        <th>Quantité</th>  
-                        <th>Prix unitaire</th>  
-                        <th>Montant total</th>  
-                        <th>Bon</th>  
-                        <th>Actions</th>  
-                      </tr>  
-                    </thead>  
-                    <tbody>  
-                      {filteredVouchers.map((voucher) => (  
-                        <tr key={voucher.id}>  
-                          <td>{new Date(voucher.date).toLocaleDateString('fr-FR')}</td>  
-                          <td className="supplier-font-medium">{voucher.camion}</td>  
-                          <td>{voucher.chauffeur}</td>  
-                          <td>{voucher.typeProduit}</td>  
-                          <td>{voucher.quantite} L</td>  
-                          <td>{voucher.prixUnitaire.toFixed(2)} MAD</td>  
-                          <td className="supplier-font-medium">{voucher.montantTotal.toFixed(2)} MAD</td>  
-                          <td>  
-                            {voucher.bonUrl ? (  
-                              <button   
-                                className="supplier-view-bon-button"  
-                                onClick={() => handleViewBon(voucher.bonUrl)}  
-                              >  
-                                <AttachFile className="supplier-bon-icon" />  
-                                Voir  
-                              </button>  
-                            ) : (  
-                              <span className="supplier-no-bon">Aucun</span>  
-                            )}  
-                          </td>  
-                          <td>  
-                            <div className="supplier-action-buttons">  
-                              <button   
-                                className="supplier-edit-action-button"  
-                                onClick={() => handleEdit(voucher)}  
-                              >  
-                                <Edit className="supplier-action-icon" />  
-                              </button>  
-                              <button   
-                                className="supplier-delete-action-button"  
-                                onClick={() => handleDelete(voucher.id)}  
-                              >  
-                                <Delete className="supplier-action-icon" />  
-                              </button>  
-                            </div>  
-                          </td>  
-                        </tr>  
-                      ))}  
-                    </tbody>  
-                  </table>  
-  
-                  {filteredVouchers.length === 0 && (  
-                    <div className="supplier-no-results">  
-                      Aucun bon trouvé pour votre recherche.  
-                    </div>  
-                  )}  
-                </div>  
-              </div>  
-            </div>  
-          </div>  
-        </div>  
-      </div>  
-  
-      {/* Modal pour ajouter un bon */}  
-      {isAddDialogOpen && (  
-        <div className="supplier-modal-overlay" onClick={() => setIsAddDialogOpen(false)}>  
-          <div className="supplier-modal-content" onClick={(e) => e.stopPropagation()}>  
-            <div className="supplier-modal-header">  
-              <h2 className="supplier-modal-title">Ajouter Bon Fournisseur</h2>  
-              <button className="supplier-modal-close" onClick={() => setIsAddDialogOpen(false)}>  
-                <X className="supplier-close-icon" />  
-              </button>  
-            </div>  
-              
-            <form onSubmit={handleAddSubmit} className="supplier-modal-form">  
-              <div className="supplier-form-row">  
-                <div className="supplier-form-group">  
-                  <label htmlFor="date" className="supplier-form-label">Date</label>  
-                  <input  
-                    id="date"  
-                    type="date"  
-                    value={formData.date}  
-                    onChange={(e) => handleInputChange("date", e.target.value)}  
-                    className="supplier-form-input"  
-                    required  
-                  />  
-                </div>  
-  
-                <div className="supplier-form-group">  
-                  <label htmlFor="camion" className="supplier-form-label">Camion</label>  
-                  <input  
-                    id="camion"  
-                    type="text"  
-                    placeholder="Ex: AB-123-CD"  
-                    value={formData.camion}  
-                    onChange={(e) => handleInputChange("camion", e.target.value)}  
-                    className="supplier-form-input"  
-                    required  
-                  />  
-                </div>  
-              </div>  
-  
-              <div className="supplier-form-row">  
-                <div className="supplier-form-group">  
-                  <label htmlFor="chauffeur" className="supplier-form-label">Chauffeur</label>  
-                  <input  
-                    id="chauffeur"  
-                    type="text"  
-                    placeholder="Ex: Jean Dupont"  
-                    value={formData.chauffeur}  
-                    onChange={(e) => handleInputChange("chauffeur", e.target.value)}  
-                    className="supplier-form-input"  
-                    required  
-                  />  
-                </div>  
-  
-                <div className="supplier-form-group">  
-                  <label htmlFor="typeProduit" className="supplier-form-label">Type du produit</label>  
-                  <select  
-                    id="typeProduit"  
-                    value={formData.typeProduit}  
-                    onChange={(e) => handleInputChange("typeProduit", e.target.value)}  
-                    className="supplier-form-select"  
-                    required  
-                  >  
-                    <option value="">Sélectionner un type</option>  
-                    <option value="Butane">Butane</option>  
-                    <option value="Propane">Propane</option>  
-                  </select>  
-                </div>  
-              </div>  
-  
-              <div className="supplier-form-row">  
-                <div className="supplier-form-group">  
-                  <label htmlFor="quantite" className="supplier-form-label">Quantité (L)</label>  
-                  <input  
-                    id="quantite"  
-                    type="number"  
-                    placeholder="Ex: 500"  
-                    value={formData.quantite}  
-                    onChange={(e) => handleInputChange("quantite", e.target.value)}  
-                    className="supplier-form-input"  
-                    min="0"  
-                    step="0.01"  
-                    required  
-                  />  
-                </div>  
-  
-                <div className="supplier-form-group">  
-                  <label htmlFor="prixUnitaire" className="supplier-form-label">Prix unitaire (MAD)</label>  
-                  <input  
-                    id="prixUnitaire"  
-                    type="number"  
-                    placeholder="Ex: 12.50"  
-                    value={formData.prixUnitaire}  
-                    onChange={(e) => handleInputChange("prixUnitaire", e.target.value)}  
-                    className="supplier-form-input"  
-                    min="0"  
-                    step="0.01"  
-                    required  
-                  />  
-                </div>  
-              </div>  
-  
-              <div className="supplier-form-group">  
-                <label className="supplier-form-label">Montant total</label>  
-                <div className="supplier-total-display">  
-                  {calculateTotal().toFixed(2)} MAD  
-                </div>  
-              </div>  
-  
-              <div className="supplier-form-group">  
-                <label htmlFor="bonFile" className="supplier-form-label">Bon (PDF/Image)</label>  
-                <input  
-                  id="bonFile"  
-                  type="file"  
-                  accept=".pdf,.jpg,.jpeg,.png"  
-                  onChange={handleFileChange}  
-                  className="supplier-form-file"  
-                />  
-              </div>  
-  
-              <div className="supplier-form-actions">  
-                <button type="button" className="supplier-cancel-button" onClick={() => setIsAddDialogOpen(false)}>  
-                  Annuler  
-                </button>  
-                <button type="submit" className="supplier-submit-button">  
-                  Ajouter  
-                </button>  
-              </div>  
-            </form>  
-          </div>  
-        </div>  
-      )}  
-  
-      {/* Modal pour modifier un bon */}  
-      {isEditDialogOpen && (  
-        <div className="supplier-modal-overlay" onClick={() => setIsEditDialogOpen(false)}>  
-          <div className="supplier-modal-content" onClick={(e) => e.stopPropagation()}>  
-            <div className="supplier-modal-header">  
-              <h2 className="supplier-modal-title">Modifier Bon Fournisseur</h2>  
-              <button className="supplier-modal-close" onClick={() => setIsEditDialogOpen(false)}>  
-                <X className="supplier-close-icon" />  
-              </button>  
-            </div>  
-              
-            <form onSubmit={handleEditSubmit} className="supplier-modal-form">  
-              <div className="supplier-form-row">  
-                <div className="supplier-form-group">  
-                  <label htmlFor="edit-date" className="supplier-form-label">Date</label>  
-                  <input  
-                    id="edit-date"  
-                    type="date"  
-                    value={formData.date}  
-                    onChange={(e) => handleInputChange("date", e.target.value)}  
-                    className="supplier-form-input"  
-                    required  
-                  />  
-                </div>  
-  
-                <div className="supplier-form-group">  
-                  <label htmlFor="edit-camion" className="supplier-form-label">Camion</label>  
-                  <input  
-                    id="edit-camion"  
-                    type="text"  
-                    placeholder="Ex: AB-123-CD"  
-                    value={formData.camion}  
-                    onChange={(e) => handleInputChange("camion", e.target.value)}  
-                    className="supplier-form-input"  
-                    required  
-                  />  
-                </div>  
-              </div>  
-  
-              <div className="supplier-form-row">  
-                <div className="supplier-form-group">  
-                  <label htmlFor="edit-chauffeur" className="supplier-form-label">Chauffeur</label>  
-                  <input  
-                    id="edit-chauffeur"  
-                    type="text"  
-                    placeholder="Ex: Jean Dupont"  
-                    value={formData.chauffeur}  
-                    onChange={(e) => handleInputChange("chauffeur", e.target.value)}  
-                    className="supplier-form-input"  
-                    required  
-                  />  
-                </div>  
-  
-                <div className="supplier-form-group">  
-                  <label htmlFor="edit-typeProduit" className="supplier-form-label">Type du produit</label>  
-                  <select  
-                    id="edit-typeProduit"  
-                    value={formData.typeProduit}  
-                    onChange={(e) => handleInputChange("typeProduit", e.target.value)}  
-                    className="supplier-form-select"  
-                    required  
-                  >  
-                    <option value="">Sélectionner un type</option>  
-                    <option value="Butane">Butane</option>  
-                    <option value="Propane">Propane</option>  
-                  </select>  
-                </div>  
-              </div>  
-  
-              <div className="supplier-form-row">  
-                <div className="supplier-form-group">  
-                  <label htmlFor="edit-quantite" className="supplier-form-label">Quantité (L)</label>  
-                  <input  
-                    id="edit-quantite"  
-                    type="number"  
-                    placeholder="Ex: 500"  
-                    value={formData.quantite}  
-                    onChange={(e) => handleInputChange("quantite", e.target.value)}  
-                    className="supplier-form-input"  
-                    min="0"  
-                    step="0.01"  
-                    required  
-                  />  
-                </div>  
-  
-                <div className="supplier-form-group">  
-                  <label htmlFor="edit-prixUnitaire" className="supplier-form-label">Prix unitaire (MAD)</label>  
-                  <input  
-                    id="edit-prixUnitaire"  
-                    type="number"  
-                    placeholder="Ex: 12.50"  
-                    value={formData.prixUnitaire}  
-                    onChange={(e) => handleInputChange("prixUnitaire", e.target.value)}  
-                    className="supplier-form-input"  
-                    min="0"  
-                    step="0.01"  
-                    required  
-                  />  
-                </div>  
-              </div>  
-  
-              <div className="supplier-form-group">  
-                <label className="supplier-form-label">Montant total</label>  
-                <div className="supplier-total-display">  
-                  {calculateTotal().toFixed(2)} MAD  
-                </div>  
-              </div>  
-  
-              <div className="supplier-form-group">  
-                <label htmlFor="edit-bonFile" className="supplier-form-label">Nouveau bon (PDF/Image)</label>  
-                <input  
-                  id="edit-bonFile"  
-                  type="file"  
-                  accept=".pdf,.jpg,.jpeg,.png"  
-                  onChange={handleFileChange}  
-                  className="supplier-form-file"  
-                />  
-                <small className="supplier-file-note">Laissez vide pour conserver le bon actuel</small>  
-              </div>  
-  
-              <div className="supplier-form-actions">  
-                <button type="button" className="supplier-cancel-button" onClick={() => setIsEditDialogOpen(false)}>  
-                  Annuler  
-                </button>  
-                <button type="submit" className="supplier-submit-button">  
-                  Sauvegarder  
-                </button>  
-              </div>  
-            </form>  
-          </div>  
-        </div>  
-      )}  
-    </div>  
-  )  
+        // Log détaillé des données reçues
+        response.data.forEach((voucher, index) => {
+          console.log(`📋 Bon ${index + 1}:`, {
+            id: voucher._id,
+            reference: voucher.bl_reference,
+            date: voucher.bl_date,
+            fournisseur: voucher.fournisseur_id?.nom,
+            depot: voucher.depot_id?.short_name, // Corrigé: utilise short_name
+            livreur: voucher.livreur_employee_id?.physical_user_id?.first_name,
+            magasinier: voucher.magasin_employee_id?.physical_user_id?.first_name,
+            hasAttachment: !!voucher.attachment
+          })
+        })
+      } else {
+        console.error("❌ Erreur dans la réponse:", response.error)
+        setError("Erreur lors du chargement des bons de livraison")
+      }
+    } catch (err) {
+      console.error("💥 Erreur lors du chargement:", err)
+      console.error("📄 Stack trace:", err.stack)
+      setError("Erreur de connexion au serveur")
+    } finally {
+      setLoading(false)
+      console.log("🏁 Fin du chargement")
+    }
+  }
+
+  // Filtrer les bons selon le terme de recherche
+  const filteredVouchers = supplierVouchers.filter(
+    (voucher) => {
+      const searchLower = searchTerm.toLowerCase()
+      const matches = 
+        voucher.bl_reference?.toLowerCase().includes(searchLower) ||
+        voucher.fournisseur_id?.nom?.toLowerCase().includes(searchLower) ||
+        voucher.depot_id?.short_name?.toLowerCase().includes(searchLower) || // Corrigé: utilise short_name
+        voucher.bl_date?.includes(searchTerm) ||
+        voucher.livreur_employee_id?.physical_user_id?.first_name?.toLowerCase().includes(searchLower) ||
+        voucher.magasin_employee_id?.physical_user_id?.first_name?.toLowerCase().includes(searchLower)
+      
+      if (searchTerm && matches) {
+        console.log("🔍 Bon trouvé dans la recherche:", voucher.bl_reference)
+      }
+      
+      return matches
+    }
+  )
+
+  console.log("🔍 Résultats filtrés:", filteredVouchers.length, "sur", supplierVouchers.length)
+
+  const handleDelete = async (voucherId) => {
+    console.log("🗑️ Tentative de suppression du bon:", voucherId)
+    
+    if (window.confirm("Êtes-vous sûr de vouloir supprimer ce bon ?")) {
+      try {
+        console.log("📡 Appel de blFrsService.deleteBLFRS avec ID:", voucherId)
+        const response = await blFrsService.deleteBLFRS(voucherId)
+        
+        console.log("📥 Réponse suppression:", response)
+        
+        if (response.success) {
+          console.log("✅ Bon supprimé avec succès")
+          setSupplierVouchers(prev => {
+            const updated = prev.filter(voucher => voucher._id !== voucherId)
+            console.log("📊 Liste mise à jour:", updated.length, "bons restants")
+            return updated
+          })
+        } else {
+          console.error("❌ Erreur lors de la suppression:", response.error)
+          alert("Erreur lors de la suppression: " + response.error)
+        }
+      } catch (error) {
+        console.error("💥 Erreur suppression:", error)
+        console.error("📄 Stack trace:", error.stack)
+        alert("Erreur lors de la suppression")
+      }
+    } else {
+      console.log("❌ Suppression annulée par l'utilisateur")
+    }
+  }
+
+  const handleViewDetails = async (voucher) => {
+    console.log("👁️ Affichage des détails pour le bon:", voucher._id)
+    console.log("📋 Données du bon:", voucher)
+    
+    try {
+      console.log("📡 Appel de blFrsService.getBLFRSById avec ID:", voucher._id)
+      const response = await blFrsService.getBLFRSById(voucher._id)
+      
+      console.log("📥 Réponse détails complète:", response)
+      console.log("✅ Success:", response?.success)
+      console.log("📊 Data reçue:", response?.data)
+      
+      if (response.success) {
+        console.log("✅ Détails chargés avec succès")
+        console.log("📋 Données détaillées:", {
+          reference: response.data.bl_reference,
+          lignes: response.data.lignes?.length || 0,
+          fournisseur: response.data.fournisseur_id,
+          depot: response.data.depot_id,
+          employees: {
+            livreur: response.data.livreur_employee_id,
+            magasinier: response.data.magasin_employee_id
+          }
+        })
+        
+        setSelectedVoucher(response.data)
+        setIsDetailModalOpen(true)
+      } else {
+        console.error("❌ Erreur lors du chargement des détails:", response.error)
+        alert("Erreur lors du chargement des détails: " + response.error)
+      }
+    } catch (error) {
+      console.error("💥 Erreur détails:", error)
+      console.error("📄 Stack trace:", error.stack)
+      console.error("🔍 Type d'erreur:", typeof error)
+      console.error("🔍 Propriétés de l'erreur:", Object.keys(error))
+      alert("Erreur lors du chargement des détails")
+    }
+  }
+
+  const handleViewAttachment = (voucher) => {  
+    console.log("📎 Tentative d'ouverture du fichier pour:", voucher.bl_reference)  
+    console.log("📄 Attachment présent:", !!voucher.attachment)  
+    console.log("📄 Type d'attachment:", typeof voucher.attachment)  
+    console.log("📄 Structure de l'attachment:", voucher.attachment)  
+      
+    if (voucher.attachment && voucher.attachment.data) {  
+      try {  
+        console.log("🔄 Conversion du Buffer en Blob...")  
+        console.log("📊 Taille du buffer:", voucher.attachment.data.length || "inconnue")  
+        console.log("📊 Type de buffer:", voucher.attachment.type)  
+          
+        // Convertir le Buffer en Uint8Array puis en Blob  
+        const uint8Array = new Uint8Array(voucher.attachment.data)  
+        console.log("✅ Uint8Array créé, taille:", uint8Array.length)  
+          
+        const blob = new Blob([uint8Array], { type: 'application/pdf' })  
+        console.log("✅ Blob créé, taille:", blob.size)  
+          
+        const url = URL.createObjectURL(blob)  
+        console.log("✅ URL créée:", url)  
+          
+        window.open(url, '_blank')  
+        console.log("✅ Fichier ouvert dans un nouvel onglet")  
+          
+        // Nettoyer l'URL après utilisation  
+        setTimeout(() => {  
+          URL.revokeObjectURL(url)  
+          console.log("🧹 URL nettoyée")  
+        }, 1000)  
+      } catch (error) {  
+        console.error("💥 Erreur lors de l'ouverture du fichier:", error)  
+        console.error("📄 Stack trace:", error.stack)  
+        alert("Erreur lors de l'ouverture du fichier")  
+      }  
+    } else {  
+      console.log("❌ Aucun fichier attaché ou structure incorrecte")  
+      console.log("📄 Attachment reçu:", voucher.attachment)  
+    }  
+  }
+
+  const getEmployeeName = (voucher) => {
+    console.log("👤 Récupération du nom de l'employé pour:", voucher.bl_reference)
+    console.log("👤 Livreur:", voucher.livreur_employee_id)
+    console.log("👤 Magasinier:", voucher.magasin_employee_id)
+    
+    if (voucher.livreur_employee_id?.physical_user_id) {
+      const user = voucher.livreur_employee_id.physical_user_id
+      const name = `${user.first_name} ${user.last_name} (Livreur)`
+      console.log("✅ Nom livreur:", name)
+      return name
+    }
+    if (voucher.magasin_employee_id?.physical_user_id) {
+      const user = voucher.magasin_employee_id.physical_user_id
+      const name = `${user.first_name} ${user.last_name} (Magasinier)`
+      console.log("✅ Nom magasinier:", name)
+      return name
+    }
+    console.log("❌ Aucun employé spécifié")
+    return "Non spécifié"
+  }
+
+  // Log de l'état actuel
+  console.log("🎯 État actuel du composant:", {
+    loading,
+    error,
+    totalVouchers: supplierVouchers.length,
+    filteredVouchers: filteredVouchers.length,
+    searchTerm,
+    isDetailModalOpen,
+    selectedVoucher: selectedVoucher?.bl_reference
+  })
+
+  if (loading) {
+    console.log("⏳ Affichage du loader")
+    return (
+      <div className="supplier-management-layout">
+        <div className="supplier-management-wrapper">
+          <div className="supplier-management-container">
+            <div className="supplier-management-content">
+              <div className="loading-message">Chargement des bons de livraison...</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    )
+  }
+
+  if (error) {
+    console.log("❌ Affichage de l'erreur:", error)
+    return (
+      <div className="supplier-management-layout">
+        <div className="supplier-management-wrapper">
+          <div className="supplier-management-container">
+            <div className="supplier-management-content">
+              <div className="error-message">{error}</div>
+              <button onClick={loadBLFRS} className="retry-button">Réessayer</button>
+            </div>
+          </div>
+        </div>
+      </div>
+    )
+  }
+
+  console.log("🎨 Rendu du composant principal")
+
+  return (
+    <div className="supplier-management-layout">
+      <div className="supplier-management-wrapper">
+        <div className="supplier-management-container">
+          <div className="supplier-management-content">
+            {/* En-tête */}
+            <div className="supplier-page-header">
+              <h1 className="supplier-page-title">Gestion des Bons des Fournisseurs</h1>
+              <p className="supplier-page-subtitle">Consultez et gérez les bons de livraison des fournisseurs</p>
+            </div>
+
+            {/* Barre de recherche */}
+            <div className="supplier-search-section">
+              <div className="supplier-search-container">
+                <Search className="supplier-search-icon" />
+                <input
+                  type="text"
+                  placeholder="Rechercher par code, fournisseur, dépôt, employé ou date..."
+                  value={searchTerm}
+                  onChange={(e) => {
+                    console.log("🔍 Recherche:", e.target.value)
+                    setSearchTerm(e.target.value)
+                  }}
+                  className="supplier-search-input"
+                />
+              </div>
+            </div>
+
+            {/* Tableau */}
+            <div className="supplier-table-card">
+              <div className="supplier-table-header">
+                <h3 className="supplier-table-title">Liste des Bons des Fournisseurs ({filteredVouchers.length})</h3>
+              </div>
+              <div className="supplier-table-content">
+                <div className="supplier-table-container">
+                  <table className="supplier-vouchers-table">
+                    <thead>
+                      <tr>
+                        <th>Code du Bon</th>
+                        <th>Date</th>
+                        <th>Fournisseur</th>
+                        <th>Dépôt</th>
+                        <th>Employé</th>
+                        {/* Supprimé: colonne Statut */}
+                        <th>Fichier</th>
+                        <th>Actions</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {filteredVouchers.map((voucher, index) => {
+                        console.log(`📋 Rendu ligne ${index + 1}:`, voucher.bl_reference)  
+                        return (  
+                          <tr key={voucher._id}>  
+                            <td className="supplier-font-medium">{voucher.bl_reference}</td>  
+                            <td>{new Date(voucher.bl_date).toLocaleDateString('fr-FR')}</td>  
+                            <td>{voucher.fournisseur_id?.nom || 'Non spécifié'}</td>  
+                            <td>{voucher.depot_id?.short_name || 'Non spécifié'}</td> {/* Corrigé: utilise short_name */}  
+                            <td>{getEmployeeName(voucher)}</td>  
+                            {/* Supprimé: colonne Statut */}  
+                            <td>  
+                              {voucher.attachment ? (    
+                                <button     
+                                  className="supplier-view-bon-button"    
+                                  onClick={() => handleViewAttachment(voucher)}    
+                                >    
+                                  <AttachFile className="supplier-bon-icon" />    
+                                  Voir    
+                                </button>    
+                              ) : (    
+                                <span className="supplier-no-bon">Aucun</span>    
+                              )}    
+                            </td>    
+                            <td>    
+                              <div className="supplier-action-buttons">    
+                                <button     
+                                  className="supplier-view-action-button"    
+                                  onClick={() => handleViewDetails(voucher)}    
+                                  title="Voir les détails"    
+                                >    
+                                  <Eye className="supplier-action-icon" />    
+                                </button>    
+                                <button     
+                                  className="supplier-delete-action-button"    
+                                  onClick={() => handleDelete(voucher._id)}    
+                                  title="Supprimer"    
+                                >    
+                                  <Delete className="supplier-action-icon" />    
+                                </button>    
+                              </div>    
+                            </td>    
+                          </tr>    
+                        )    
+                      })}    
+                    </tbody>    
+                  </table>    
+    
+                  {filteredVouchers.length === 0 && (    
+                    <div className="supplier-no-results">    
+                      Aucun bon trouvé pour votre recherche.    
+                    </div>    
+                  )}    
+                </div>    
+              </div>    
+            </div>    
+          </div>    
+        </div>    
+      </div>    
+    
+      {/* Modal de détails */}    
+      {isDetailModalOpen && selectedVoucher && (    
+        <div className="supplier-modal-overlay" onClick={() => setIsDetailModalOpen(false)}>    
+          <div className="supplier-modal-content detail-modal" onClick={(e) => e.stopPropagation()}>    
+            <div className="supplier-modal-header">    
+              <h2 className="supplier-modal-title">Détails du Bon {selectedVoucher.bl_reference}</h2>    
+              <button className="supplier-modal-close" onClick={() => setIsDetailModalOpen(false)}>    
+                <X className="supplier-close-icon" />    
+              </button>    
+            </div>    
+                  
+            <div className="detail-modal-body">    
+              <div className="detail-section">    
+                <h3>Informations générales</h3>    
+                <div className="detail-grid">    
+                  <div className="detail-item">    
+                    <label>Code du bon:</label>    
+                    <span>{selectedVoucher.bl_reference}</span>    
+                  </div>    
+                  <div className="detail-item">    
+                    <label>Date:</label>    
+                    <span>{new Date(selectedVoucher.bl_date).toLocaleDateString('fr-FR')}</span>    
+                  </div>    
+                  <div className="detail-item">    
+                    <label>Date d'entrée:</label>    
+                    <span>{selectedVoucher.entry_date ? new Date(selectedVoucher.entry_date).toLocaleDateString('fr-FR') : 'Non spécifiée'}</span>    
+                  </div>    
+                  {/* Supprimé: section Statut */}  
+                </div>    
+              </div>    
+    
+              <div className="detail-section">    
+                <h3>Fournisseur et Dépôt</h3>    
+                <div className="detail-grid">    
+                  <div className="detail-item">    
+                    <label>Fournisseur:</label>    
+                    <span>{selectedVoucher.fournisseur_id?.nom || 'Non spécifié'}</span>    
+                  </div>    
+                  <div className="detail-item">    
+                    <label>Code fournisseur:</label>    
+                    <span>{selectedVoucher.fournisseur_id?.code || 'Non spécifié'}</span>    
+                  </div>    
+                  <div className="detail-item">    
+                    <label>Dépôt:</label>    
+                    <span>{selectedVoucher.depot_id?.short_name || 'Non spécifié'}</span> {/* Corrigé: utilise short_name */}  
+                  </div>    
+                  <div className="detail-item">    
+                    <label>Code dépôt:</label>    
+                    <span>{selectedVoucher.depot_id?.reference || 'Non spécifié'}</span> {/* Corrigé: utilise reference */}  
+                  </div>    
+                </div>    
+              </div>    
+    
+              <div className="detail-section">    
+                <h3>Employés</h3>    
+                <div className="detail-grid">    
+                  <div className="detail-item">    
+                    <label>Livreur:</label>    
+                    <span>    
+                      {selectedVoucher.livreur_employee_id?.physical_user_id  
+                        ? `${selectedVoucher.livreur_employee_id.physical_user_id.first_name} ${selectedVoucher.livreur_employee_id.physical_user_id.last_name}`  
+                        : 'Non spécifié'  
+                      }    
+                    </span>    
+                  </div>    
+                  <div className="detail-item">    
+                    <label>Magasinier:</label>    
+                    <span>    
+                      {selectedVoucher.magasin_employee_id?.physical_user_id  
+                        ? `${selectedVoucher.magasin_employee_id.physical_user_id.first_name} ${selectedVoucher.magasin_employee_id.physical_user_id.last_name}`  
+                        : 'Non spécifié'  
+                      }    
+                    </span>    
+                  </div>    
+                </div>    
+              </div>    
+    
+              {selectedVoucher.commentaires && (    
+                <div className="detail-section">    
+                  <h3>Commentaires</h3>    
+                  <p className="detail-comments">{selectedVoucher.commentaires}</p>    
+                </div>    
+              )}    
+    
+              {selectedVoucher.lignes && selectedVoucher.lignes.length > 0 && (    
+                <div className="detail-section">    
+                  <h3>Lignes de livraison</h3>    
+                  <div className="detail-table-container">    
+                    <table className="detail-lines-table">    
+                      <thead>    
+                        <tr>    
+                          <th>Produit</th>    
+                          <th>Quantité</th>    
+                          <th>Unité</th>    
+                          <th>Prix unitaire</th>    
+                          <th>Total</th>    
+                        </tr>    
+                      </thead>    
+                      <tbody>    
+                        {selectedVoucher.lignes.map((ligne, index) => (    
+                          <tr key={index}>    
+                            <td>{ligne.product_id?.short_name || 'Produit non spécifié'}</td>    
+                            <td>{ligne.quantity}</td> {/* Corrigé: utilise quantity au lieu de quantite */}  
+                            <td>{ligne.um_id?.unitemesure || 'N/A'}</td>    
+                            <td>{ligne.prix_unitaire ? `${ligne.prix_unitaire.toFixed(2)} MAD` : 'N/A'}</td>    
+                            <td>{ligne.quantity && ligne.prix_unitaire ? `${(ligne.quantity * ligne.prix_unitaire).toFixed(2)} MAD` : ligne.total_ligne ? `${ligne.total_ligne.toFixed(2)} MAD` : 'N/A'}</td> {/* Corrigé: utilise quantity et total_ligne */}  
+                          </tr>    
+                        ))}    
+                      </tbody>    
+                    </table>    
+                  </div>    
+                </div>    
+              )}    
+            </div>    
+          </div>    
+        </div>    
+      )}    
+    </div>    
+  )    
 }

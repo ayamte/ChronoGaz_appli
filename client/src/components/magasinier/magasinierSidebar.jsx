@@ -7,7 +7,8 @@ import {
   MdMenu as Menu,  
   MdClose as X,  
   MdPerson,  
-  MdExpandMore  
+  MdExpandMore,
+  MdMap as Map  
 } from 'react-icons/md' 
 import logo from './logo.png'  
 import "./magasinierSidebar.css"  
@@ -33,6 +34,11 @@ const menuItems = [
     icon: Warehouse,  
     label: "Déchargement camions",  
     href: "/magasin/dechargement",  
+  },
+  {      
+      icon: Map,      
+      label: "Télécharger un bon",      
+      href: "/chauffeur/supplier-voucher",      
   }  
 ]  
   

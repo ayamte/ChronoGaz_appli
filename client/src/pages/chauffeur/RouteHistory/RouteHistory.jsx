@@ -12,310 +12,297 @@ import {
   MdCalendarToday as Calendar,  
 } from 'react-icons/md'  
 import './RouteHistory.css'  
-  
-// Mock data pour l'historique des tournées  
-const mockRouteHistories = [  
-  {  
-    routeId: "route-2024-001",  
-    chauffeurId: "chauffeur-001",  
-    truckId: "truck-001",  
-    routeDate: "2024-01-15",  
-    startTime: "08:00",  
-    endTime: "17:30",  
-    totalDeliveries: 4,  
-    successfulDeliveries: 3,  
-    failedDeliveries: 0,  
-    partialDeliveries: 1,  
-    totalDistance: 85.5,  
-    fuelUsed: 12.3,  
-    status: "finalized",  
-    deliveries: [  
-      {  
-        id: "del-001",  
-        orderNumber: "CMD-2024-001",  
-        customerName: "Restaurant Le Gourmet",  
-        address: "15 Rue de la Paix, 75001 Paris",  
-        timeWindow: "08:00 - 10:00",  
-        actualDeliveryTime: "09:15",  
-        status: "delivered",  
-        products: [  
-          {  
-            id: "prod-001",  
-            productName: "Bouteille Gaz Butane 13kg",  
-            productCode: "BUT13",  
-            quantityPlanned: 10,  
-            quantityDelivered: 10,  
-            unit: "bottles",  
-          },  
-        ],  
-        customerNotes: "Livraison parfaite, client satisfait",  
-      },  
-      {  
-        id: "del-002",  
-        orderNumber: "CMD-2024-002",  
-        customerName: "Boulangerie Martin",  
-        address: "42 Avenue des Champs, 75008 Paris",  
-        timeWindow: "10:30 - 12:00",  
-        actualDeliveryTime: "11:45",  
-        status: "delivered",  
-        products: [  
-          {  
-            id: "prod-002",  
-            productName: "Bouteille Gaz Propane 35kg",  
-            productCode: "PRO35",  
-            quantityPlanned: 5,  
-            quantityDelivered: 5,  
-            unit: "bottles",  
-          },  
-        ],  
-        customerNotes: "Accès par la cour arrière comme convenu",  
-      },  
-      {  
-        id: "del-003",  
-        orderNumber: "CMD-2024-003",  
-        customerName: "Hôtel Royal",  
-        address: "8 Place Vendôme, 75001 Paris",  
-        timeWindow: "14:00 - 16:00",  
-        actualDeliveryTime: "15:20",  
-        status: "delivered",  
-        products: [  
-          {  
-            id: "prod-003",  
-            productName: "Bouteille Gaz Butane 6kg",  
-            productCode: "BUT06",  
-            quantityPlanned: 15,  
-            quantityDelivered: 15,  
-            unit: "bottles",  
-          },  
-        ],  
-        customerNotes: "Réception au sous-sol, signature du responsable",  
-      },  
-      {  
-        id: "del-004",  
-        orderNumber: "CMD-2024-004",  
-        customerName: "Café Central",  
-        address: "25 Boulevard Saint-Germain, 75005 Paris",  
-        timeWindow: "16:30 - 18:00",  
-        actualDeliveryTime: "17:15",  
-        status: "partial",  
-        products: [  
-          {  
-            id: "prod-004",  
-            productName: "Bouteille Gaz Butane 13kg",  
-            productCode: "BUT13",  
-            quantityPlanned: 8,  
-            quantityDelivered: 6,  
-            unit: "bottles",  
-            discrepancy: -2,  
-            notes: "Client a refusé 2 bouteilles - dates trop anciennes",  
-          },  
-        ],  
-        issues: [  
-          {  
-            id: "issue-001",  
-            type: "product_issue",  
-            description: "Client a refusé 2 bouteilles en raison de dates de péremption proches",  
-            timestamp: "17:15",  
-          },  
-        ],  
-        customerNotes: "Prévoir remplacement des 2 bouteilles refusées",  
-      },  
-    ],  
-  },  
-  {  
-    routeId: "route-2024-002",  
-    chauffeurId: "chauffeur-001",  
-    truckId: "truck-001",  
-    routeDate: "2024-01-14",  
-    startTime: "08:30",  
-    endTime: "16:45",  
-    totalDeliveries: 3,  
-    successfulDeliveries: 3,  
-    failedDeliveries: 0,  
-    partialDeliveries: 0,  
-    totalDistance: 67.2,  
-    fuelUsed: 9.8,  
-    status: "finalized",  
-    deliveries: [  
-      {  
-        id: "del-005",  
-        orderNumber: "CMD-2024-005",  
-        customerName: "Brasserie du Centre",  
-        address: "28 Rue de Rivoli, 75004 Paris",  
-        timeWindow: "09:00 - 11:00",  
-        actualDeliveryTime: "10:20",  
-        status: "delivered",  
-        products: [  
-          {  
-            id: "prod-005",  
-            productName: "Bouteille Gaz Propane 35kg",  
-            productCode: "PRO35",  
-            quantityPlanned: 8,  
-            quantityDelivered: 8,  
-            unit: "bottles",  
-          },  
-        ],  
-        customerNotes: "Livraison en cuisine, accès direct",  
-      },  
-    ],  
-  },  
-  {  
-    routeId: "route-2024-003",  
-    chauffeurId: "chauffeur-001",  
-    truckId: "truck-001",  
-    routeDate: "2024-01-13",  
-    startTime: "07:45",  
-    endTime: "18:15",  
-    totalDeliveries: 6,  
-    successfulDeliveries: 5,  
-    failedDeliveries: 1,  
-    partialDeliveries: 0,  
-    totalDistance: 112.8,  
-    fuelUsed: 16.2,  
-    status: "finalized",  
-    deliveries: [  
-      {  
-        id: "del-006",  
-        orderNumber: "CMD-2024-006",  
-        customerName: "Restaurant La Belle Époque",  
-        address: "45 Avenue Montaigne, 75008 Paris",  
-        timeWindow: "08:00 - 10:00",  
-        actualDeliveryTime: "09:30",  
-        status: "delivered",  
-        products: [  
-          {  
-            id: "prod-006",  
-            productName: "Bouteille Gaz Butane 13kg",  
-            productCode: "BUT13",  
-            quantityPlanned: 12,  
-            quantityDelivered: 12,  
-            unit: "bottles",  
-          },  
-        ],  
-        customerNotes: "Livraison standard, client satisfait",  
-      },  
-    ],  
-  },  
-]  
-  
-const mockUser = {  
-  id: "user-001",  
-  name: "Jean Dupont",  
-  role: "chauffeur",  
-}  
-  
-const mockTruck = {  
-  id: "truck-001",  
-  plateNumber: "AB-123-CD",  
-  model: "Mercedes Sprinter",  
-}  
+import { authService } from '../../../services/authService'  
+import { orderService } from '../../../services/orderService'  
+import livraisonService from '../../../services/livraisonService'
+
   
 export default function RouteHistoryPage() {  
-  // TOUS LES HOOKS EN PREMIER  
   const [routeHistories, setRouteHistories] = useState([])  
   const [selectedRoute, setSelectedRoute] = useState(null)  
   const [loading, setLoading] = useState(true)  
+  const [currentUser, setCurrentUser] = useState(null)  
+  const [error, setError] = useState(null)  
+  
+  // Récupérer l'utilisateur connecté avec employee_id  
+  useEffect(() => {  
+    const fetchCurrentUser = async () => {  
+      try {  
+        console.log('🔍 DÉBUT - Récupération utilisateur connecté')  
+        const token = authService.getToken()  
+          
+        if (!token) {  
+          console.error('❌ ERREUR: Aucun token trouvé')  
+          setError('Session expirée - veuillez vous reconnecter')  
+          return  
+        }  
+          
+        const response = await fetch(`${process.env.REACT_APP_API_URL || 'http://localhost:5000'}/api/users/profile`, {  
+          headers: {  
+            'Authorization': `Bearer ${token}`,  
+            'Content-Type': 'application/json'  
+          }  
+        })  
+          
+        if (!response.ok) {  
+          console.error('❌ ERREUR API:', response.status, response.statusText)  
+          return  
+        }  
+          
+        const data = await response.json()  
+          
+        if (!data.success || !data.data) {  
+          console.error('❌ ERREUR: Données utilisateur manquantes')  
+          return  
+        }  
+          
+        const userData = {  
+          ...data.data,  
+          employee_id: data.data.employee_info?._id  
+        }  
+          
+        if (!userData.employee_id) {  
+          console.error('❌ ERREUR: employee_id manquant dans userData')  
+          setError('ID employé manquant - contactez l\'administrateur')  
+          return  
+        }  
+          
+        console.log('✅ Employee ID trouvé:', userData.employee_id)  
+        setCurrentUser(userData)  
+          
+      } catch (error) {  
+        console.error('💥 EXCEPTION lors de la récupération utilisateur:', error)  
+        setError(`Erreur technique: ${error.message}`)  
+      }  
+    }  
+    fetchCurrentUser()  
+  }, [])  
   
   // Charger les données au montage du composant  
   useEffect(() => {  
-    const loadRouteHistories = async () => {  
-      setLoading(true)  
-      try {  
-        // Simulate API call  
-        await new Promise((resolve) => setTimeout(resolve, 1000))  
-          
-        // Trier les tournées par date (plus récente en premier)  
-        const sortedRoutes = mockRouteHistories.sort((a, b) =>   
-          new Date(b.routeDate) - new Date(a.routeDate)  
-        )  
-          
-        setRouteHistories(sortedRoutes)  
-        if (sortedRoutes.length > 0) {  
-          setSelectedRoute(sortedRoutes[0])  
-        }  
-      } catch (error) {  
-        console.error("Error loading route histories:", error)  
-      } finally {  
-        setLoading(false)  
-      }  
+    if (currentUser?.employee_id) {  
+      console.log('🚀 Déclenchement du chargement pour employee_id:', currentUser.employee_id)  
+      loadRouteHistories()  
+    } else {  
+      console.log('⏳ En attente de l\'employee_id...')  
     }  
+  }, [currentUser])  
   
-    loadRouteHistories()  
-  }, [])  
+  const loadRouteHistories = async () => {  
+    setLoading(true)  
+    setError(null)  
+      
+    try {  
+      console.log('🔍 Début chargement historique pour employé:', currentUser?.employee_id)  
+        
+      // ✅ CORRECTION: Utiliser livraisonService au lieu d'orderService  
+      const deliveriesData = await livraisonService.getLivraisons({  
+        livreur_employee_id: currentUser.employee_id,  
+        etat: 'all'  
+      })  
+        
+      console.log('📦 Données reçues de l\'API:', deliveriesData)  
+      console.log('📊 Nombre de livraisons:', deliveriesData.total)  
+        
+      if (!deliveriesData.data) {  
+        throw new Error('Données invalides reçues de l\'API')  
+      }  
+    
+      const routeHistoriesMap = new Map()  
+        
+      deliveriesData.data.forEach((delivery, index) => {  
+        console.log(`🚚 Traitement livraison ${index + 1}:`, {  
+          id: delivery.id,  
+          commande: delivery.commande_id?.numero_commande,  
+          statut: delivery.commande_id?.statut,  
+          date: delivery.delivery_date  
+        })  
+          
+        const deliveryDate = delivery.delivery_date  
+        if (!deliveryDate) {  
+          console.warn('⚠️ Date de livraison manquante pour:', delivery.id)  
+          return  
+        }  
+          
+        const routeDate = new Date(deliveryDate).toISOString().split('T')[0]  
+          
+        if (!routeHistoriesMap.has(routeDate)) {  
+          routeHistoriesMap.set(routeDate, {  
+            routeId: `route-${routeDate}`,  
+            chauffeurId: currentUser.employee_id,  
+            truckId: delivery.trucks_id?._id,  
+            routeDate: routeDate,  
+            startTime: "08:00",  
+            endTime: "18:00",  
+            totalDeliveries: 0,  
+            successfulDeliveries: 0,  
+            failedDeliveries: 0,  
+            partialDeliveries: 0,  
+            totalDistance: 0,  
+            fuelUsed: 0,  
+            status: "finalized",  
+            deliveries: [],  
+            truck: delivery.trucks_id || { matricule: 'Camion' }  
+          })  
+        }  
+    
+        const routeHistory = routeHistoriesMap.get(routeDate)  
+          
+        // Transformer la livraison avec la structure transformée par livraisonService  
+        const transformedDelivery = transformLivraisonServiceToHistoryFormat(delivery)  
+        console.log('✅ Livraison transformée:', transformedDelivery)  
+          
+        if (transformedDelivery) {  
+          routeHistory.deliveries.push(transformedDelivery)  
+          routeHistory.totalDeliveries++  
+            
+          switch (transformedDelivery.status) {  
+            case 'delivered':  
+              routeHistory.successfulDeliveries++  
+              break  
+            case 'partial':  
+              routeHistory.partialDeliveries++  
+              break  
+            case 'failed':  
+              routeHistory.failedDeliveries++  
+              break  
+          }  
+        }  
+      })  
+    
+      const sortedRoutes = Array.from(routeHistoriesMap.values()).sort((a, b) =>  
+        new Date(b.routeDate) - new Date(a.routeDate)  
+      )  
+    
+      console.log('📋 Routes finales groupées:', sortedRoutes)  
+      setRouteHistories(sortedRoutes)  
+      if (sortedRoutes.length > 0) {  
+        setSelectedRoute(sortedRoutes[0])  
+      }  
+    } catch (error) {  
+      console.error("❌ Erreur lors du chargement de l'historique:", error)  
+      setError('Impossible de charger l\'historique des tournées')  
+    } finally {  
+      setLoading(false)  
+    }  
+  }
   
-  // TOUTES LES FONCTIONS  
+  // ✅ FONCTION CORRIGÉE: Accéder aux données via planification_id  
+  const transformLivraisonServiceToHistoryFormat = (delivery) => {  
+    try {  
+      const commande = delivery.commande_id  
+      if (!commande) {  
+        console.warn('⚠️ Commande manquante pour la livraison:', delivery.id)  
+        return null  
+      }  
+    
+      // Nom du client  
+      let customerName = 'Client inconnu'  
+      if (commande.customer_id?.physical_user_id) {  
+        customerName = `${commande.customer_id.physical_user_id.first_name} ${commande.customer_id.physical_user_id.last_name}`  
+      } else if (commande.customer_id?.customer_code) {  
+        customerName = commande.customer_id.customer_code  
+      }  
+    
+      // Adresse  
+      let address = 'Adresse non disponible'  
+      if (commande.address_id) {  
+        const addr = commande.address_id  
+        address = `${addr.numimmeuble || ''} ${addr.street || ''}, ${addr.city_id?.name || 'Ville'}`.trim()  
+      }  
+    
+      return {  
+        id: delivery.id,  
+        orderNumber: commande.numero_commande,  
+        customerName: customerName,  
+        address: address,  
+        timeWindow: "08:00 - 18:00",  
+        actualDeliveryTime: delivery.date ? new Date(delivery.date).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' }) : "Non spécifié",  
+        status: mapLivraisonStatusToDeliveryStatus(delivery.etat),  
+        // ✅ CORRECTION: Utiliser les lignes transformées par livraisonService  
+        products: (commande.lignes || []).map(ligne => ({  
+          id: ligne._id,  
+          productName: ligne.product_id?.long_name || ligne.product_id?.short_name || 'Produit',  
+          productCode: ligne.product_id?.ref || '',  
+          quantityPlanned: ligne.quantity,  
+          quantityDelivered: ligne.quantity,  
+          unit: ligne.UM_id?.unitemesure || 'unités',  
+          discrepancy: 0,  
+          notes: ''  
+        })),  
+        customerNotes: commande.details || delivery.details || '',  
+        issues: []  
+      }  
+    } catch (error) {  
+      console.error('❌ Erreur transformation livraison:', error)  
+      return null  
+    }  
+  }
+  
+  // ✅ FONCTION AJOUTÉE: Mapping des statuts de livraison  
+  const mapLivraisonStatusToDeliveryStatus = (etat) => {  
+    switch (etat) {  
+      case 'LIVRE': return 'delivered'  
+      case 'ANNULE': return 'failed'  
+      case 'ECHEC': return 'failed'  
+      default: return 'delivered'  
+    }  
+  }  
+  
+  // Fonctions utilitaires  
   const formatDate = (dateString) => {  
     const date = new Date(dateString)  
-    return date.toLocaleDateString("fr-FR", {  
-      weekday: "long",  
-      day: "numeric",  
-      month: "long",  
-      year: "numeric"  
+    return date.toLocaleDateString('fr-FR', {  
+      weekday: 'long',  
+      year: 'numeric',  
+      month: 'long',  
+      day: 'numeric'  
     })  
   }  
   
   const formatShortDate = (dateString) => {  
     const date = new Date(dateString)  
-    return date.toLocaleDateString("fr-FR", {  
-      day: "2-digit",  
-      month: "2-digit",  
-      year: "numeric"  
+    return date.toLocaleDateString('fr-FR', {  
+      day: '2-digit',  
+      month: '2-digit'  
     })  
-  }  
-  
-  const getStatusColor = (status) => {  
-    switch (status) {  
-      case "delivered":  
-        return "rh-status-delivered"  
-      case "partial":  
-        return "rh-status-partial"  
-      case "failed":  
-        return "rh-status-failed"  
-      default:  
-        return "rh-status-default"  
-    }  
   }  
   
   const getStatusText = (status) => {  
     switch (status) {  
-      case "delivered":  
-        return "Livré"  
-      case "partial":  
-        return "Partiel"  
-      case "failed":  
-        return "Échec"  
-      default:  
-        return status  
+      case "delivered": return "Livré"  
+      case "partial": return "Partiel"  
+      case "failed": return "Échec"  
+      default: return status  
     }  
   }  
   
   const getStatusIcon = (status) => {  
     switch (status) {  
-      case "delivered":  
-        return <CheckCircle className="rh-status-icon" />  
-      case "partial":  
-        return <AlertTriangle className="rh-status-icon" />  
-      case "failed":  
-        return <XCircle className="rh-status-icon" />  
-      default:  
-        return null  
+      case "delivered": return <CheckCircle className="rh-status-icon" />  
+      case "partial": return <AlertTriangle className="rh-status-icon" />  
+      case "failed": return <XCircle className="rh-status-icon" />  
+      default: return null  
+    }  
+  }  
+  
+  const getStatusColor = (status) => {  
+    switch (status) {  
+      case "delivered": return "rh-status-delivered"  
+      case "partial": return "rh-status-partial"  
+      case "failed": return "rh-status-failed"  
+      default: return "rh-status-default"  
     }  
   }  
   
   const getIssueTypeText = (type) => {  
     switch (type) {  
-      case "delay":  
-        return "Retard"  
-      case "customer_absent":  
-        return "Client absent"  
-      case "access_problem":  
-        return "Problème d'accès"  
-      case "product_issue":  
-        return "Problème produit"  
-      case "other":  
-        return "Autre"  
-      default:  
-        return type  
+      case "delay": return "Retard"  
+      case "customer_absent": return "Client absent"  
+      case "access_problem": return "Problème d'accès"  
+      case "product_issue": return "Problème produit"  
+      case "other": return "Autre"  
+      default: return type  
     }  
   }  
   
@@ -343,7 +330,7 @@ export default function RouteHistoryPage() {
   
   if (loading) {  
     return (  
-      <div className="rh-layout">    
+      <div className="rh-layout">  
         <div className="rh-wrapper">  
           <div className="rh-loading">  
             <div className="rh-spinner" />  
@@ -354,9 +341,25 @@ export default function RouteHistoryPage() {
     )  
   }  
   
+  if (error) {  
+    return (  
+      <div className="rh-layout">  
+        <div className="rh-wrapper">  
+          <div className="rh-error">  
+            <XCircle className="rh-error-icon" />  
+            <h3>Erreur</h3>  
+            <p>{error}</p>  
+            <button onClick={loadRouteHistories} className="rh-btn rh-btn-primary">  
+              Réessayer  
+            </button>  
+          </div>  
+        </div>  
+      </div>  
+    )  
+  }  
+  
   return (  
     <div className="rh-layout">  
-        
       <div className="rh-wrapper">  
         <div className="rh-container">  
           <div className="rh-content">  
@@ -410,16 +413,12 @@ export default function RouteHistoryPage() {
                             <div className="rh-route-summary">  
                               <div className="rh-route-info">  
                                 <TruckIcon className="rh-truck-icon" />  
-                                <span>{mockTruck.plateNumber}</span>  
+                                <span>{route.truck?.matricule || 'Camion'}</span>  
                               </div>  
                               <div className="rh-route-stats">  
                                 <span className="rh-stat">  
                                   <Package className="rh-stat-icon" />  
                                   {route.totalDeliveries} livraisons  
-                                </span>  
-                                <span className="rh-stat">  
-                                  <MapPin className="rh-stat-icon" />  
-                                  {route.totalDistance}km  
                                 </span>  
                                 <span className="rh-stat">  
                                   <Clock className="rh-stat-icon" />  
@@ -451,7 +450,7 @@ export default function RouteHistoryPage() {
                         <div className="rh-overview-info">  
                           <div className="rh-overview-item">  
                             <TruckIcon className="rh-overview-icon" />  
-                            <span>{mockTruck.plateNumber} - {mockTruck.model}</span>  
+                            <span>{selectedRoute.truck?.matricule} - {selectedRoute.truck?.modele || 'Modèle inconnu'}</span>  
                           </div>  
                           <div className="rh-overview-item">  
                             <Clock className="rh-overview-icon" />  

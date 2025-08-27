@@ -65,7 +65,7 @@ const getProfile = async (req, res) => {
           date_inscription: customer.date_inscription,  
           statut: customer.statut  
         };  
-}
+       }
       }  
   
       // Si c'est un employé, récupérer les infos employé  
@@ -117,18 +117,19 @@ const getProfile = async (req, res) => {
   
       // Si c'est un client moral, récupérer les infos client  
       if (user.role_id.code === 'CLIENT') {  
-        const customer = await Customer.findOne({ moral_user_id: moralUser._id });  
-        if (customer) {  
-          profileData.customer_info = {  
-            customer_code: customer.customer_code,  
-            type_client: customer.type_client,  
-            credit_limite: customer.credit_limite,  
-            credit_utilise: customer.credit_utilise,  
-            date_inscription: customer.date_inscription,  
-            statut: customer.statut  
-          };  
-        }  
+      const customer = await Customer.findOne({ moral_user_id: moralUser._id });  
+      if (customer) {  
+        profileData.customer_info = {  
+          customer_id: customer._id,  // ✅ AJOUTER cette ligne  
+          customer_code: customer.customer_code,  
+          type_client: customer.type_client,  
+          credit_limite: customer.credit_limite,  
+          credit_utilise: customer.credit_utilise,  
+          date_inscription: customer.date_inscription,  
+          statut: customer.statut  
+        };  
       }  
+}
     }  
   
     res.json({  

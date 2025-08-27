@@ -831,11 +831,11 @@ body.sidebar-collapsed .truck-management-wrapper {
 }
 
 /* Styles spécifiques pour le modal de détails */  
-.detail-modal {    
+.truck-detail-modal {    
   max-width: 1200px; /* Augmenté de 800px à 1200px */    
 } 
   
-.detail-content {  
+.truck-detail-content {  
   padding: 24px;  
 }  
   
@@ -879,13 +879,13 @@ body.sidebar-collapsed .truck-management-wrapper {
   margin-bottom: 24px;  
 }  
   
-.detail-section {  
+.truck-detail-section {  
   background-color: #f9fafb;  
   padding: 20px;  
   border-radius: 8px;  
 }  
   
-.detail-section h3 {  
+.truck-detail-section h3 {  
   font-size: 1.125rem;  
   font-weight: 600;  
   color: #111827;  
@@ -894,32 +894,33 @@ body.sidebar-collapsed .truck-management-wrapper {
   padding-bottom: 8px;  
 }  
   
-.detail-item {  
+.truck-detail-item {  
   display: flex;  
   justify-content: space-between;  
-  align-items: flex-start;  
+  align-items: center; 
   margin-bottom: 12px;  
   padding: 8px 0;  
   border-bottom: 1px solid #e5e7eb;  
 }  
   
-.detail-item:last-child {  
+.truck-detail-item:last-child {  
   border-bottom: none;  
   margin-bottom: 0;  
-}  
-  
-.detail-label {  
+} 
+
+.truck-detail-label {  
   font-weight: 500;  
   color: #374151;  
   min-width: 120px;  
   flex-shrink: 0;  
 }  
   
-.detail-value {  
+.truck-detail-value {  
   color: #111827;  
   text-align: right;  
   flex: 1;  
-}  
+  margin-left: 16px; /* Ajouter un espacement */  
+}
   
 .detail-description {  
   background-color: #f9fafb;  
@@ -1077,17 +1078,17 @@ body.sidebar-collapsed .truck-management-wrapper {
     gap: 16px;  
   }  
     
-  .detail-item {  
+  .truck-detail-item {  
     flex-direction: column;  
     align-items: flex-start;  
     gap: 4px;  
   }  
     
-  .detail-label {  
+  .truck-detail-label {  
     min-width: auto;  
   }  
     
-  .detail-value {  
+  .truck-detail-value {  
     text-align: left;  
   }  
     
