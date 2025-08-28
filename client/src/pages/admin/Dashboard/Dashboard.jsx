@@ -5,11 +5,10 @@ import {
   MdCalendarToday as Calendar,   
   MdRefresh as RotateCcw   
 } from "react-icons/md"  
-import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, PieChart, Pie, Cell } from 'recharts'
-import "./Dashboard.css"
+import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts'  
+import "./Dashboard.css"  
 import butaneImage from './butane.png'
 import propaneImage from './propane.png'
-import { useDashboardData, useChartData, useFormattedStats } from "../../../hooks/useDashboardData"
   
 // Fonction pour générer des données aléatoires mais cohérentes basées sur une date  
 const generateSalesData = (dateString, index = 0) => {  
@@ -141,25 +140,16 @@ const generateDataForPeriod = (periodType, currentDate) => {
   return data  
 }  
   
-export default function Dashboard() {
-  // ✅ NOUVEAU: Utilisation des données réelles
-  const { data: dashboardData, loading, error, lastUpdate, refresh } = useDashboardData(30000); // Actualisation toutes les 30s
-  const chartData = useChartData(dashboardData);
-  const stats = useFormattedStats(dashboardData);
-
-  // Garder les anciennes fonctions pour la compatibilité (mais utiliser les vraies données)
-  const [selectedPeriod, setSelectedPeriod] = useState("jour")
-  const [currentDate, setCurrentDate] = useState(new Date())
-
-  // ✅ NOUVEAU: Utiliser les vraies données ou fallback
-  const currentData = chartData || generateDataForPeriod(selectedPeriod, currentDate)
-
-  // ✅ CORRECTION: Calculs basés sur les vraies données
-  const totalCommandes = stats?.totalCommandes || 0
-  const totalClients = stats?.totalClients || 0
-  const totalVentes = currentData.reduce((sum, item) => sum + (item.commandes || item.butane || 0), 0)
-  const totalButane = currentData.reduce((sum, item) => sum + (item.butane || 0), 0)
-  const totalPropane = currentData.reduce((sum, item) => sum + (item.propane || 0), 0)
+export default function Dashboard() {  
+  const [selectedPeriod, setSelectedPeriod] = useState("jour")  
+  const [currentDate, setCurrentDate] = useState(new Date())  
+  
+  const currentData = generateDataForPeriod(selectedPeriod, currentDate)  
+  
+  // Calcul des totaux pour les cards  
+  const totalButane = currentData.reduce((sum, item) => sum + item.butane, 0)  
+  const totalPropane = currentData.reduce((sum, item) => sum + item.propane, 0)  
+  const totalVentes = totalButane + totalPropane  
   
   const handlePeriodChange = (newPeriod) => {  
     setSelectedPeriod(newPeriod)  
@@ -207,99 +197,16 @@ export default function Dashboard() {
     }  
   }  
   
-  // ✅ NOUVEAU: Gestion du chargement et des erreurs
-  if (loading && !dashboardData) {
-    return (
-      <div className="dashboard-layout">
-        <div className="dashboard-wrapper">
-          <div className="dashboard-container">
-            <div style={{
-              display: 'flex',
-              justifyContent: 'center',
-              alignItems: 'center',
-              height: '400px',
-              flexDirection: 'column',
-              gap: '20px'
-            }}>
-              <div style={{ fontSize: '48px' }}>📊</div>
-              <div style={{ fontSize: '18px', color: '#666' }}>Chargement des données...</div>
-            </div>
-          </div>
-        </div>
-      </div>
-    );
-  }
-
-  if (error) {
-    return (
-      <div className="dashboard-layout">
-        <div className="dashboard-wrapper">
-          <div className="dashboard-container">
-            <div style={{
-              display: 'flex',
-              justifyContent: 'center',
-              alignItems: 'center',
-              height: '400px',
-              flexDirection: 'column',
-              gap: '20px'
-            }}>
-              <div style={{ fontSize: '48px' }}>❌</div>
-              <div style={{ fontSize: '18px', color: '#ef4444' }}>Erreur: {error}</div>
-              <button
-                onClick={refresh}
-                style={{
-                  padding: '10px 20px',
-                  backgroundColor: '#3b82f6',
-                  color: 'white',
-                  border: 'none',
-                  borderRadius: '8px',
-                  cursor: 'pointer'
-                }}
-              >
-                🔄 Réessayer
-              </button>
-            </div>
-          </div>
-        </div>
-      </div>
-    );
-  }
-
-  return (
-    <div className="dashboard-layout">
-
-      <div className="dashboard-wrapper">
-        <div className="dashboard-container">
-          <div className="dashboard-content">
-            {/* Header avec indicateur temps réel */}
-            <div className="dashboard-header">
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                <h1 className="dashboard-title">Dashboard ChronoGaz</h1>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '15px' }}>
-                  {lastUpdate && (
-                    <span style={{ fontSize: '12px', color: '#666' }}>
-                      Dernière mise à jour: {lastUpdate.toLocaleTimeString()}
-                    </span>
-                  )}
-                  <button
-                    onClick={refresh}
-                    style={{
-                      padding: '8px 12px',
-                      backgroundColor: '#10b981',
-                      color: 'white',
-                      border: 'none',
-                      borderRadius: '6px',
-                      cursor: 'pointer',
-                      display: 'flex',
-                      alignItems: 'center',
-                      gap: '5px'
-                    }}
-                  >
-                    🔄 Actualiser
-                  </button>
-                </div>
-              </div>
-            </div>
+  return (  
+    <div className="dashboard-layout">    
+          
+      <div className="dashboard-wrapper">  
+        <div className="dashboard-container">  
+          <div className="dashboard-content">  
+            {/* Header */}  
+            <div className="dashboard-header">  
+              <h1 className="dashboard-title">Dashboard des Ventes</h1>   
+            </div>  
   
             {/* Cards statistiques */}  
             <div className="dashboard-stats-grid">  
