@@ -70,17 +70,24 @@ export default function NextOrderMapPage() {
         setDriverLocation(newPosition);
         console.log('📍 Position du chauffeur mise à jour:', newPosition);
         
-        // ✅ C'est ici que l'appel crucial est toujours effectué si les conditions sont remplies
-        if (isConnected && (selectedOrder?.livraisonId || selectedOrder?.planificationId)) {
+        // ✅ PRIORITÉ ABSOLUE à l'ID de livraison pour le suivi en temps réel
+        if (isConnected && selectedOrder) {
+          // Utiliser UNIQUEMENT l'ID de livraison si disponible, sinon planification
           const trackingId = selectedOrder.livraisonId || selectedOrder.planificationId;
-          console.log(`📤 Envoi de la position pour l'ID: ${trackingId}`);
-          updatePosition(trackingId, newPosition.latitude, newPosition.longitude);
+          const trackingType = selectedOrder.livraisonId ? 'LIVRAISON' : 'PLANIFICATION';
+
+          if (trackingId) {
+            console.log(`📤 Envoi de la position pour l'ID: ${trackingId} (type: ${trackingType})`);
+            updatePosition(trackingId, newPosition.latitude, newPosition.longitude);
+          } else {
+            console.log('❌ Aucun ID de tracking disponible:', selectedOrder);
+          }
         } else {
           console.log('❌ Pas d\'envoi de position:', {
             isConnected,
+            selectedOrder: !!selectedOrder,
             livraisonId: selectedOrder?.livraisonId,
-            planificationId: selectedOrder?.planificationId,
-            selectedOrder: !!selectedOrder
+            planificationId: selectedOrder?.planificationId
           });
         }
       },
@@ -418,7 +425,22 @@ export default function NextOrderMapPage() {
 
   const nextOrder = sortedOrders[0];
 
+  // ✅ DÉBOGAGE: Logs détaillés pour comprendre l'état
+  useEffect(() => {
+    console.log('🔍 [DEBUG] État actuel:');
+    console.log('  - Next order:', nextOrder);
+    console.log('  - Next order status:', nextOrder?.status);
+    console.log('  - Next order etat:', nextOrder?.etat);
+    console.log('  - Next order planificationId:', nextOrder?.planificationId);
+    console.log('  - Next order livraisonId:', nextOrder?.livraisonId);
+    console.log('  - Selected order:', selectedOrder);
+    console.log('  - Is tracking:', isTracking);
+    console.log('  - Driver location:', driverLocation);
+  }, [nextOrder, selectedOrder, isTracking, driverLocation]);
+
   const handleStartRoute = async (order) => {
+    console.log('🎯 BOUTON DÉMARRER ROUTE CLIQUÉ !', order);
+
     if (!order.planificationId) {
       setNotification({
         type: "error",
@@ -429,36 +451,110 @@ export default function NextOrderMapPage() {
 
     setLoading(true);
     try {
-      const deliveryData = {
-        latitude: driverLocation?.latitude || 0,
-        longitude: driverLocation?.longitude || 0,
-        details: `Démarrage de la livraison pour ${order.customer.name}`
-      };
+      // ✅ NOUVEAU: Vérifier d'abord si une livraison existe déjà
+      console.log('🔍 Vérification livraison existante pour planification:', order.planificationId);
 
-      console.log('🚀 Démarrage livraison pour planification:', order.planificationId);
-      
-      await livraisonService.startLivraison(order.planificationId, deliveryData);
-  
-      await new Promise(resolve => setTimeout(resolve, 1500));
-  
+      let livraisonId = null;
+
+      try {
+        const existingLivraisons = await livraisonService.getLivraisons({
+          planificationId: order.planificationId,
+          etat: 'EN_COURS'
+        });
+
+        if (existingLivraisons.data && existingLivraisons.data.length > 0) {
+          const existingLivraison = existingLivraisons.data[0];
+          livraisonId = existingLivraison.id || existingLivraison._id;
+          console.log('✅ Livraison existante trouvée:', livraisonId);
+        }
+      } catch (searchError) {
+        console.log('⚠️ Erreur recherche livraison existante:', searchError.message);
+      }
+
+      // Si pas de livraison existante, en créer une nouvelle
+      if (!livraisonId) {
+        const deliveryData = {
+          latitude: driverLocation?.latitude || 33.274458833333334,
+          longitude: driverLocation?.longitude || -7.581053666666666,
+          details: `Démarrage de la livraison pour ${order.customer.name}`
+        };
+
+        console.log('🚀 Création nouvelle livraison pour planification:', order.planificationId);
+        console.log('📍 Données de livraison:', deliveryData);
+
+        const startResult = await livraisonService.startLivraison(order.planificationId, deliveryData);
+        console.log('📦 Résultat création livraison:', startResult);
+
+        livraisonId = startResult.data?._id || startResult._id;
+        console.log('✅ Nouvelle livraison créée avec ID:', livraisonId);
+      }
+
+      if (!livraisonId) {
+        throw new Error('Impossible d\'obtenir un ID de livraison');
+      }
+
+      // ✅ NOUVEAU: Mettre à jour immédiatement l'ordre sélectionné
+      const updatedOrder = {
+        ...order,
+        livraisonId: livraisonId,
+        isLivraison: true,
+        isPlanification: false,
+        status: 'en_route',
+        etat: 'EN_COURS'
+      };
+      setSelectedOrder(updatedOrder);
+      console.log('✅ Ordre sélectionné mis à jour IMMÉDIATEMENT avec ID livraison:', livraisonId);
+
+      // ✅ NOUVEAU: Démarrer automatiquement le suivi GPS avec le bon ID
+      if (!isTracking) {
+        console.log('🎯 Démarrage automatique du suivi GPS avec ID livraison...');
+        setIsTracking(true);
+        setNotification({ type: 'info', message: 'Démarrage du suivi GPS...' });
+
+        const watchId = navigator.geolocation.watchPosition(
+          (position) => {
+            const newPosition = {
+              latitude: position.coords.latitude,
+              longitude: position.coords.longitude
+            };
+            setDriverLocation(newPosition);
+            console.log('📍 Position du chauffeur mise à jour:', newPosition);
+
+            // Utiliser l'ID de livraison pour le suivi
+            if (isConnected && livraisonId) {
+              console.log(`📤 Envoi de la position pour l'ID LIVRAISON: ${livraisonId}`);
+              updatePosition(livraisonId, newPosition.latitude, newPosition.longitude);
+            }
+          },
+          (error) => {
+            console.error('❌ Erreur de suivi GPS:', error);
+            setNotification({ type: 'error', message: `Erreur GPS: ${error.message}` });
+            setIsTracking(false);
+          },
+          { enableHighAccuracy: true, timeout: 20000, maximumAge: 0 }
+        );
+
+        watchIdRef.current = watchId;
+      }
+
+      await new Promise(resolve => setTimeout(resolve, 1000));
       await refreshDeliveryData();
-  
+
       setNotification({
         type: "success",
-        message: `Route démarrée vers ${order.customer.name}`
+        message: `Route démarrée vers ${order.customer.name} - Suivi GPS actif`
       });
-  
-      const address = `${order.deliveryAddress.street}, ${order.deliveryAddress.city}`;
-      const encodedAddress = encodeURIComponent(address);
-      console.log('🗺️ Ouverture Google Maps pour:', address);
-      window.open(`https://www.google.com/maps/dir/?api=1&destination=${encodedAddress}`, "_blank");
-  
+
+      // ✅ SUPPRIMÉ: Plus d'ouverture Google Maps - utilisation de la carte intégrée
+      console.log('✅ Route démarrée - Suivi GPS actif sur la carte intégrée');
+
       setTimeout(() => setNotification(null), 5000);
     } catch (error) {
       console.error('💥 EXCEPTION démarrage route:', error);
+      console.error('💥 Détails de l\'erreur:', error.response?.data || error.message);
       setNotification({
         type: "error",
-        message: "Erreur lors du démarrage de la route"
+        message: `Erreur lors du démarrage: ${error.response?.data?.message || error.message}`
       });
     } finally {
       setLoading(false);
@@ -742,25 +838,56 @@ export default function NextOrderMapPage() {
                         Échec
                       </button>
   
-                      {nextOrder.status === "assigned" && (
-                        <button
-                          className="nom-btn nom-btn-primary"
-                          onClick={() => handleStartRoute(nextOrder)}
-                          disabled={loading}
-                        >
-                          {loading ? (
-                            <>
-                              <Loader2 className="nom-btn-icon nom-spinner" />
-                              Démarrage...
-                            </>
-                          ) : (
-                            <>
-                              <Navigation className="nom-btn-icon" />
-                              Démarrer Route
-                            </>
-                          )}
-                        </button>
-                      )}
+                      {/* ✅ DÉBOGAGE: Toujours afficher le bouton pour test */}
+                      <button
+                        className="nom-btn nom-btn-primary"
+                        onClick={() => {
+                          console.log('🎯 CLIC SUR DÉMARRER ROUTE !');
+                          console.log('Order à démarrer:', nextOrder);
+                          handleStartRoute(nextOrder);
+                        }}
+                        disabled={loading || !nextOrder}
+                        style={{
+                          backgroundColor: nextOrder?.status === "assigned" ? '' : '#orange',
+                          opacity: nextOrder?.status === "assigned" ? 1 : 0.7
+                        }}
+                      >
+                        {loading ? (
+                          <>
+                            <Loader2 className="nom-btn-icon nom-spinner" />
+                            Démarrage...
+                          </>
+                        ) : (
+                          <>
+                            <Navigation className="nom-btn-icon" />
+                            {nextOrder?.status === "assigned" ? "Démarrer Route" : `Forcer Démarrage (${nextOrder?.status})`}
+                          </>
+                        )}
+                      </button>
+
+                      {/* ✅ DÉBOGAGE: Bouton de test pour création manuelle */}
+                      <button
+                        className="nom-btn nom-btn-warning"
+                        onClick={async () => {
+                          console.log('🧪 TEST: Création manuelle de livraison');
+                          if (nextOrder?.planificationId) {
+                            try {
+                              const result = await livraisonService.startLivraison(nextOrder.planificationId, {
+                                latitude: driverLocation?.latitude || 33.274458833333334,
+                                longitude: driverLocation?.longitude || -7.581053666666666,
+                                details: 'Test manuel de création'
+                              });
+                              console.log('✅ TEST: Livraison créée:', result);
+                              await refreshDeliveryData();
+                            } catch (error) {
+                              console.error('❌ TEST: Erreur:', error);
+                            }
+                          }
+                        }}
+                        disabled={loading}
+                      >
+                        🧪 Test Création
+                      </button>
                     </div>
                   </div>
                 </div>
@@ -775,24 +902,17 @@ export default function NextOrderMapPage() {
                       <MapPin className="nom-card-icon" />
                       <span>Carte Interactive</span>
                     </div>
-                    {/* ✅ Nouveaux boutons pour démarrer/arrêter le suivi */}
-                    <div className="nom-tracking-actions">
-                      <button
-                        className="nom-btn nom-btn-success"
-                        onClick={handleStartTracking}
-                        disabled={isTracking || (!selectedOrder?.livraisonId && !selectedOrder?.planificationId)}
-                      >
-                        <Target className="nom-btn-icon" />
-                        Démarrer le suivi
-                      </button>
-                      <button
-                        className="nom-btn nom-btn-danger"
-                        onClick={handleStopTracking}
-                        disabled={!isTracking}
-                      >
-                        <X className="nom-btn-icon" />
-                        Arrêter le suivi
-                      </button>
+                    {/* ✅ SUPPRIMÉ: Boutons de suivi GPS - démarrage automatique */}
+                    <div className="nom-tracking-status">
+                      {isTracking ? (
+                        <span style={{ color: '#28a745', fontWeight: 'bold' }}>
+                          🎯 Suivi GPS actif
+                        </span>
+                      ) : (
+                        <span style={{ color: '#6c757d' }}>
+                          📍 Suivi GPS inactif
+                        </span>
+                      )}
                     </div>
                   </div>
                   <div className="nom-card-content nom-map-content">
@@ -803,6 +923,45 @@ export default function NextOrderMapPage() {
                       onOrderSelect={handleViewDetails}
                       className="nom-real-map"
                     />
+
+                    {/* ✅ DÉBOGAGE: Affichage des informations de position */}
+                    <div style={{
+                      position: 'absolute',
+                      top: '10px',
+                      right: '10px',
+                      background: 'rgba(0,0,0,0.7)',
+                      color: 'white',
+                      padding: '10px',
+                      borderRadius: '5px',
+                      fontSize: '12px',
+                      zIndex: 1000
+                    }}>
+                      <div><strong>🗺️ Debug Carte Chauffeur</strong></div>
+                      <div>Driver Location: {driverLocation ?
+                        `${driverLocation.latitude || driverLocation.lat}, ${driverLocation.longitude || driverLocation.lng}` :
+                        'Non disponible'
+                      }</div>
+                      <div>Is Tracking: {isTracking ? 'Oui' : 'Non'}</div>
+                      <div>Active Orders: {activeOrders.length}</div>
+                      <button
+                        onClick={() => {
+                          console.log('🔄 Force refresh carte chauffeur');
+                          window.location.reload();
+                        }}
+                        style={{
+                          marginTop: '5px',
+                          padding: '5px 10px',
+                          backgroundColor: '#007bff',
+                          color: 'white',
+                          border: 'none',
+                          borderRadius: '3px',
+                          cursor: 'pointer',
+                          fontSize: '10px'
+                        }}
+                      >
+                        🔄 Recharger
+                      </button>
+                    </div>
                   </div>
                 </div>
               </div>

@@ -4,7 +4,8 @@ import { authService } from './services/authService';
 import FirstLoginModal from './components/FirstLoginModal/FirstLoginModal';  
   
 import Home from './components/Home';        
-import Dashboard from './pages/admin/Dashboard/Dashboard';        
+import Dashboard from './pages/admin/Dashboard/Dashboard';
+import RealDashboard from './pages/admin/Dashboard/RealDashboard';
 import GestionCamion from './pages/admin/gestionCamion/gestionCamion'; 
 import AjouterCamion from './pages/admin/AjouterCamion/AjouterCamion';        
 import GestionClient from './pages/admin/gestionClient/gestionClient';        
@@ -159,14 +160,23 @@ function App() {
             <Route path="/complete-profile" element={<CompleteProfile />} />
      
             {/* Routes protégées pour admin */}        
-            <Route         
-              path="/dashboard"         
-              element={        
-                <ProtectedRoute allowedRoles={['ADMIN']}>        
-                  <Dashboard />        
-                </ProtectedRoute>        
-              }         
-            />        
+            <Route
+              path="/dashboard"
+              element={
+                <ProtectedRoute allowedRoles={['ADMIN']}>
+                  <Dashboard />
+                </ProtectedRoute>
+              }
+            />
+            {/* ✅ NOUVEAU: Dashboard avec données réelles */}
+            <Route
+              path="/dashboard/real"
+              element={
+                <ProtectedRoute allowedRoles={['ADMIN']}>
+                  <RealDashboard />
+                </ProtectedRoute>
+              }
+            />
             <Route         
               path="/admin/gestion-camions"         
               element={        

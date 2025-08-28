@@ -41,14 +41,53 @@ const startLivraison = async (req, res) => {
       camion: planification.trucks_id?.matricule
     });
     
-    // Vérifier qu'il n'y a pas déjà une livraison    
-    const livraisonExistante = await Livraison.findOne({ planification_id: planificationId });    
-    if (livraisonExistante) {    
-      return res.status(400).json({    
-        success: false,    
-        message: 'Une livraison existe déjà pour cette planification'    
-      });    
-    }    
+    // ✅ CORRECTION: Gérer le cas de livraison existante avec notification
+    const livraisonExistante = await Livraison.findOne({ planification_id: planificationId });
+    if (livraisonExistante) {
+      console.log('⚠️ [DEBUG] Livraison existante trouvée:', livraisonExistante._id);
+
+      // ✅ NOUVEAU: Mettre à jour le statut de la commande pour livraison existante
+      const Commande = require('../models/Commande');
+      await Commande.findByIdAndUpdate(planification.commande_id._id, {
+        statut: 'EN_COURS'
+      });
+      console.log('✅ [DEBUG] Statut commande existante mis à jour vers EN_COURS');
+
+      // ✅ NOUVEAU: Envoyer quand même la notification WebSocket pour livraison existante
+      if (req.io) {
+        const deliveryStartedData = {
+          orderId: planification.commande_id._id,
+          deliveryId: livraisonExistante._id,
+          planificationId: planificationId,
+          status: 'EN_COURS',
+          message: 'Livraison existante activée',
+          timestamp: new Date().toISOString()
+        };
+
+        req.io.emit('delivery_started', deliveryStartedData);
+        req.io.emit('status_updated', {
+          orderId: planification.commande_id._id,
+          deliveryId: livraisonExistante._id,
+          status: 'EN_COURS',
+          timestamp: new Date().toISOString()
+        });
+
+        // ✅ CORRECTION: Envoyer aussi order_status_updated pour mettre à jour le statut de commande
+        req.io.emit('order_status_updated', {
+          orderId: planification.commande_id._id,
+          status: 'EN_COURS',
+          timestamp: new Date().toISOString()
+        });
+
+        console.log('📤 [WebSocket] Notifications pour livraison existante envoyées:', deliveryStartedData);
+      }
+
+      return res.status(200).json({
+        success: true,
+        message: 'Livraison existante activée',
+        data: livraisonExistante
+      });
+    }
     
     // Récupérer le chauffeur du camion si pas assigné à la planification
     let livreurId = planification.livreur_employee_id?._id;
@@ -81,8 +120,15 @@ const startLivraison = async (req, res) => {
       total_tva: 0    
     });    
     
-    await nouvelleLivraison.save();    
+    await nouvelleLivraison.save();
     console.log('✅ [DEBUG] Livraison créée avec ID:', nouvelleLivraison._id);
+
+    // ✅ NOUVEAU: Mettre à jour explicitement le statut de la commande
+    const Commande = require('../models/Commande');
+    await Commande.findByIdAndUpdate(planification.commande_id._id, {
+      statut: 'EN_COURS'
+    });
+    console.log('✅ [DEBUG] Statut commande mis à jour vers EN_COURS');
     // La synchronisation avec la commande se fait automatiquement via le middleware
     
     // Copier les lignes de commande vers les lignes de livraison    
@@ -99,14 +145,47 @@ const startLivraison = async (req, res) => {
       total_ligne: ligne.quantity * ligne.price    
     }));    
     
-    await LivraisonLine.insertMany(lignesLivraison);    
+    await LivraisonLine.insertMany(lignesLivraison);
     console.log('✅ [DEBUG] Lignes de livraison créées:', lignesLivraison.length);
-    
-    res.status(201).json({    
-      success: true,    
-      message: 'Livraison démarrée avec succès',    
-      data: nouvelleLivraison    
-    });    
+
+    // ✅ NOUVEAU: Notifier le client via WebSocket qu'une livraison a été créée
+    if (req.io) {
+      const deliveryStartedData = {
+        orderId: planification.commande_id._id,
+        deliveryId: nouvelleLivraison._id,
+        planificationId: planificationId,
+        status: 'EN_COURS',
+        message: 'Livraison démarrée',
+        timestamp: new Date().toISOString()
+      };
+
+      // ✅ CORRECTION: Notifier avec plusieurs événements pour compatibilité
+      req.io.emit('delivery_started', deliveryStartedData);
+      req.io.emit('status_updated', {
+        orderId: planification.commande_id._id,
+        deliveryId: nouvelleLivraison._id,
+        status: 'EN_COURS',
+        timestamp: new Date().toISOString()
+      });
+
+      // ✅ CORRECTION: Envoyer aussi order_status_updated pour mettre à jour le statut de commande
+      req.io.emit('order_status_updated', {
+        orderId: planification.commande_id._id,
+        status: 'EN_COURS',
+        timestamp: new Date().toISOString()
+      });
+
+      console.log('📤 [WebSocket] Toutes notifications envoyées:', {
+        delivery_started: deliveryStartedData,
+        order_status_updated: 'EN_COURS'
+      });
+    }
+
+    res.status(201).json({
+      success: true,
+      message: 'Livraison démarrée avec succès',
+      data: nouvelleLivraison
+    });
     
   } catch (error) {    
     console.error('❌ Erreur lors du démarrage de la livraison:', error);    

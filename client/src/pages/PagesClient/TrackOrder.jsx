@@ -7,8 +7,10 @@ import Title from "../../components/client/TrackOrderPage/Title";
 import OrderStatusCard from "../../components/client/TrackOrderPage/OrderStatusCard";          
 import OrderProgress from "../../components/client/TrackOrderPage/OrderProgress";          
 import DeliveryDriverInfo from "../../components/client/TrackOrderPage/DeliveryDriverInfo";          
-import InteractiveMap from "../../components/client/TrackOrderPage/InteractiveMap";          
-import OrderSummary from "../../components/client/TrackOrderPage/OrderSummary";          
+import InteractiveMap from "../../components/client/TrackOrderPage/InteractiveMap";
+import SimpleMap from "../../components/client/TrackOrderPage/SimpleMap";
+import { useDeliveryTracking } from "../../hooks/useDeliveryTracking";
+import OrderSummary from "../../components/client/TrackOrderPage/OrderSummary";
 import CancelOrderButton from '../../components/client/TrackOrderPage/CancelOrderButton';           
 import './TrackOrder.css';           
     
@@ -22,7 +24,55 @@ const TrackOrder = () => {
   const { orderId } = useParams();          
   const navigate = useNavigate();      
     
-  const { subscribe, isConnected } = useWebSocket(true);      
+  const { subscribe, isConnected } = useWebSocket(true);
+
+  // ✅ SIMPLE: Extraire les positions + WebSocket temps réel
+  const [currentDriverPosition, setCurrentDriverPosition] = useState(null);
+
+  const destinationPosition = orderData?.command?.address_id ? {
+    lat: parseFloat(orderData.command.address_id.latitude),
+    lng: parseFloat(orderData.command.address_id.longitude)
+  } : null;
+
+  // Position initiale du chauffeur
+  useEffect(() => {
+    if (orderData?.livraison?.latitude && orderData?.livraison?.longitude) {
+      const initialPos = {
+        lat: parseFloat(orderData.livraison.latitude),
+        lng: parseFloat(orderData.livraison.longitude)
+      };
+      setCurrentDriverPosition(initialPos);
+      console.log('🔍 [TrackOrder] Position initiale chauffeur:', initialPos);
+    }
+  }, [orderData?.livraison]);
+
+  // ✅ NOUVEAU: Écouter les mises à jour WebSocket temps réel
+  useEffect(() => {
+    if (!orderData?.livraison?._id || !isConnected) return;
+
+    const unsubscribePosition = subscribe('position_updated', (data) => {
+      console.log('📡 [TrackOrder] Position WebSocket reçue:', data);
+
+      if (data.deliveryId === orderData.livraison._id) {
+        const newPosition = {
+          lat: parseFloat(data.position.latitude),
+          lng: parseFloat(data.position.longitude),
+          timestamp: data.timestamp
+        };
+
+        console.log('✅ [TrackOrder] Mise à jour position chauffeur temps réel:', newPosition);
+        setCurrentDriverPosition(newPosition);
+      }
+    });
+
+    return unsubscribePosition;
+  }, [orderData?.livraison?._id, isConnected, subscribe]);
+
+  console.log('🔍 [TrackOrder] Positions finales:', {
+    currentDriverPosition,
+    destinationPosition,
+    livraisonData: orderData?.livraison
+  });
 
   // ✅ NOUVEAU: Fonction pour récupérer les commandes du client connecté
   const fetchUserOrders = useCallback(async () => {
@@ -74,14 +124,43 @@ const TrackOrder = () => {
       setLoading(true);          
       setError(null);          
         
-      const orderResponse = await api.get(`/commands/${orderId}`);          
-      console.log('Données de commande:', orderResponse.data);          
-                
-      if (orderResponse.data.success) {              
-        console.log('✅ Réponse API réussie');      
-        console.log('📊 Structure complète des données:', JSON.stringify(orderResponse.data.data, null, 2));      
-              
-        setOrderData(orderResponse.data.data);      
+      console.log('🔄 Rechargement des données de commande pour ID:', orderId);
+      const orderResponse = await api.get(`/commands/${orderId}`);
+      console.log('📦 Données de commande reçues:', orderResponse.data);
+
+      if (orderResponse.data.success) {
+        console.log('✅ Réponse API réussie');
+        console.log('📊 Structure complète des données:', JSON.stringify(orderResponse.data.data, null, 2));
+
+        // ✅ NOUVEAU: Vérification spéciale pour livraison
+        const data = orderResponse.data.data;
+        console.log('🔍 Analyse des données:');
+        console.log('   - Commande:', data?.command ? 'Présente' : 'Absente');
+        console.log('   - Planification:', data?.planification ? 'Présente' : 'Absente');
+        console.log('   - Livraison:', data?.livraison ? 'Présente' : 'Absente');
+
+        if (data?.planification && !data?.livraison) {
+          console.log('⚠️ Planification présente mais pas de livraison - Recherche manuelle...');
+
+          // Essayer de récupérer la livraison manuellement
+          try {
+            const livraisonResponse = await api.get('/livraisons', {
+              params: {
+                planificationId: data.planification._id,
+                etat: 'EN_COURS'
+              }
+            });
+
+            if (livraisonResponse.data.success && livraisonResponse.data.data.length > 0) {
+              console.log('✅ Livraison trouvée manuellement:', livraisonResponse.data.data[0]);
+              data.livraison = livraisonResponse.data.data[0];
+            }
+          } catch (livraisonError) {
+            console.log('⚠️ Erreur recherche livraison manuelle:', livraisonError.message);
+          }
+        }
+
+        setOrderData(data);
               
         // Logs de débogage détaillés      
         console.log('🔍 Vérification des conditions de redirection:');      
@@ -159,27 +238,78 @@ const TrackOrder = () => {
     if (orderId && isConnected) {    
       console.log('✅ [TrackOrder] Abonnement aux événements WebSocket...');    
           
-      const unsubscribeStatus = subscribe('order_status_updated', (data) => {    
-        console.log('🔄 [TrackOrder] Statut mis à jour:', data);    
-        if (data.orderId === orderId) {    
-          console.log('✅ [TrackOrder] Mise à jour pour cette commande - rechargement...');    
-          fetchOrderData();    
-        }    
-      });    
+      const unsubscribeStatus = subscribe('order_status_updated', (data) => {
+        console.log('🔄 [TrackOrder] order_status_updated reçu:', data);
+        console.log('   - orderId reçu:', data.orderId);
+        console.log('   - orderId attendu:', orderId);
+        console.log('   - Match:', data.orderId === orderId);
+
+        if (data.orderId === orderId) {
+          console.log('✅ [TrackOrder] Statut commande mis à jour - IMMÉDIAT:', data.status);
+
+          // ✅ NOUVEAU: Mise à jour immédiate du statut sans rechargement complet
+          setOrderData(prevData => {
+            if (prevData?.command) {
+              const newData = {
+                ...prevData,
+                command: {
+                  ...prevData.command,
+                  statut: data.status
+                }
+              };
+              console.log('📊 [TrackOrder] Données mises à jour:', newData.command.statut);
+              return newData;
+            }
+            return prevData;
+          });
+
+          // Recharger les données complètes en arrière-plan
+          console.log('🔄 [TrackOrder] Rechargement données en arrière-plan...');
+          fetchOrderData();
+        } else {
+          console.log('❌ [TrackOrder] order_status_updated ignoré (ID différent)');
+        }
+      });
       
-      // NOUVEAU: Écouter les nouvelles assignations/planifications  
-      const unsubscribeAssignment = subscribe('new_assignment', (data) => {    
-        console.log('📋 [TrackOrder] Nouvelle assignation reçue:', data);    
-        if (data.orderId === orderId) {    
-          console.log('✅ [TrackOrder] Planification pour cette commande - rechargement...');    
-          fetchOrderData();    
-        }    
-      });    
-      
-      return () => {    
-        unsubscribeStatus();    
-        unsubscribeAssignment();    
-      };    
+      // NOUVEAU: Écouter les nouvelles assignations/planifications
+      const unsubscribeAssignment = subscribe('new_assignment', (data) => {
+        console.log('📋 [TrackOrder] Nouvelle assignation reçue:', data);
+        if (data.orderId === orderId) {
+          console.log('✅ [TrackOrder] Planification pour cette commande - rechargement...');
+          fetchOrderData();
+        }
+      });
+
+      // ✅ NOUVEAU: Écouter le démarrage de livraison
+      const unsubscribeDeliveryStarted = subscribe('delivery_started', (data) => {
+        console.log('🚚 [TrackOrder] Livraison démarrée reçue:', data);
+        if (data.orderId === orderId) {
+          console.log('✅ [TrackOrder] Livraison démarrée pour cette commande - rechargement...');
+
+          // ✅ NOUVEAU: Mise à jour immédiate du statut
+          setOrderData(prevData => {
+            if (prevData?.command) {
+              return {
+                ...prevData,
+                command: {
+                  ...prevData.command,
+                  statut: 'EN_COURS'
+                }
+              };
+            }
+            return prevData;
+          });
+
+          // Recharger les données complètes
+          fetchOrderData();
+        }
+      });
+
+      return () => {
+        unsubscribeStatus();
+        unsubscribeAssignment();
+        unsubscribeDeliveryStarted();
+      };
     }    
   }, [orderId, isConnected, subscribe, fetchOrderData]);  
     
@@ -481,17 +611,65 @@ const TrackOrder = () => {
                   />          
                 )}          
           
-                {/* ✅ CORRIGÉ: Vérifier l'état de livraison depuis orderData */}      
-                {orderData?.livraison && orderData.livraison.etat === 'EN_COURS' && (          
-                  <InteractiveMap          
-                    deliveryId={orderData.livraison._id}          
-                    isVisible={true}          
-                    autoCenter={true}          
-                    showRoute={true}          
-                    updateInterval={10000}    
-                    onStatusChange={handleStatusChange}      
-                  />          
-                )}          
+                {/* ✅ SOLUTION SIMPLE: Toujours rendre la carte si livraison existe */}
+                {orderData?.livraison ? (
+                  <div style={{
+                    width: '100%',
+                    height: '400px',
+                    minHeight: '400px',
+                    border: '2px solid #007bff',
+                    borderRadius: '8px',
+                    overflow: 'hidden',
+                    marginTop: '20px',
+                    backgroundColor: '#f8f9fa'
+                  }}>
+                    <div style={{
+                      padding: '10px',
+                      backgroundColor: '#007bff',
+                      color: 'white',
+                      fontWeight: 'bold'
+                    }}>
+                      🗺️ Suivi en temps réel - Livraison {orderData.livraison.etat}
+                    </div>
+                    <div style={{ height: '350px', position: 'relative' }}>
+                      <InteractiveMap
+                        deliveryId={orderData.livraison._id}
+                        driverPosition={currentDriverPosition}
+                        destinationPosition={destinationPosition}
+                        isVisible={true}
+                        autoCenter={true}
+                        showRoute={true}
+                        onPositionUpdate={(pos) => console.log('📍 Position mise à jour:', pos)}
+                        onStatusChange={(status) => console.log('📊 Statut changé:', status)}
+                      />
+                    </div>
+                  </div>
+                ) : orderData?.planification ? (
+                  <div style={{
+                    padding: '20px',
+                    backgroundColor: '#fff3cd',
+                    border: '1px solid #ffeaa7',
+                    margin: '10px 0',
+                    borderRadius: '8px'
+                  }}>
+                    <h4>🗺️ Carte de suivi</h4>
+                    <p><strong>État:</strong> Planifiée - En attente de démarrage</p>
+                    <p style={{ color: '#856404' }}>
+                      ⏳ En attente que le chauffeur démarre la route...
+                    </p>
+                  </div>
+                ) : (
+                  <div style={{
+                    padding: '20px',
+                    backgroundColor: '#f8d7da',
+                    border: '1px solid #f5c6cb',
+                    margin: '10px 0',
+                    borderRadius: '8px'
+                  }}>
+                    <h4>🗺️ Carte de suivi</h4>
+                    <p><strong>État:</strong> Aucune livraison trouvée</p>
+                  </div>
+                )}
           
                 <OrderSummary           
                   orderData={orderData}           

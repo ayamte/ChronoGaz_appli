@@ -1,5 +1,9 @@
 const Product = require('../models/Product');
 const Stock = require('../models/Stock');
+const Commande = require('../models/Commande');
+const Livraison = require('../models/Livraison');
+const Customer = require('../models/Customer');
+const Employe = require('../models/Employe');
 const Truck = require('../models/Truck');
 
 // Statistiques générales du module Produits & Stock
@@ -267,4 +271,32 @@ exports.exportProductsCSV = async (req, res) => {
       error: error.message
     });
   }
+};
+
+// ✅ NOUVEAU: Version ultra-simple pour tester
+exports.getRealDashboardStats = (req, res) => {
+  console.log('📊 [Dashboard] API appelée - test simple');
+
+  res.json({
+    success: true,
+    message: 'API Dashboard fonctionne !',
+    data: {
+      totaux: {
+        commandes: 42,
+        clients: 15,
+        chauffeurs: 3,
+        camions: 2
+      },
+      statutsCommandes: {
+        'EN_COURS': 5,
+        'LIVREE': 30,
+        'CONFIRMEE': 7
+      },
+      commandesParJour: [
+        { _id: '2025-08-28', count: 3, montantTotal: 150 },
+        { _id: '2025-08-27', count: 2, montantTotal: 100 }
+      ]
+    },
+    timestamp: new Date().toISOString()
+  });
 };

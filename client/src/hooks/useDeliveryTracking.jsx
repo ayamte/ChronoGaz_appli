@@ -5,14 +5,15 @@ import { useWebSocket } from './useWebSocket';
 const GRAPHHOPPER_API_KEY = process.env.REACT_APP_GRAPHHOPPER_KEY;  
 console.log('GraphHopper Key:', GRAPHHOPPER_API_KEY);
 
-export const useDeliveryTracking = (deliveryId, options = {}) => {  
-  const {  
-    enabled = true,  
-    interval = 10000,  
-    onPositionUpdate,  
-    onStatusChange,  
-    realTimeUpdates = true  
-  } = options;  
+export const useDeliveryTracking = (deliveryId, options = {}) => {
+  const {
+    enabled = true,
+    interval = 10000,
+    onPositionUpdate,
+    onStatusChange,
+    realTimeUpdates = true,
+    initialData = null  // ✅ NOUVEAU: Données initiales
+  } = options;
   
   const [deliveryData, setDeliveryData] = useState(null);  
   const [driverPosition, setDriverPosition] = useState(null);  
@@ -115,17 +116,67 @@ export const useDeliveryTracking = (deliveryId, options = {}) => {
       if (response.data.success) {  
         const data = response.data.data;  
           
-        // Comparer avec les données précédentes pour éviter les mises à jour inutiles  
-        const newDriverPos = data.derniere_position ? {  
-          lat: parseFloat(data.derniere_position.latitude),  
-          lng: parseFloat(data.derniere_position.longitude),  
-          timestamp: data.derniere_position.timestamp  
-        } : null;  
-  
-        const newDestPos = data.destination ? {  
-          lat: parseFloat(data.destination.latitude),  
-          lng: parseFloat(data.destination.longitude)  
-        } : null;  
+        // ✅ CORRECTION: Extraire les positions depuis les bonnes propriétés
+        console.log('🔍 [useDeliveryTracking] Recherche position dans data:', {
+          derniere_position: data.derniere_position,
+          data_latitude: data.latitude,
+          data_longitude: data.longitude,
+          livraison_latitude: data.livraison?.latitude,
+          livraison_longitude: data.livraison?.longitude
+        });
+
+        const newDriverPos = data.derniere_position ? {
+          lat: parseFloat(data.derniere_position.latitude),
+          lng: parseFloat(data.derniere_position.longitude),
+          timestamp: data.derniere_position.timestamp
+        } : (data.latitude && data.longitude) ? {
+          lat: parseFloat(data.latitude),
+          lng: parseFloat(data.longitude),
+          timestamp: new Date().toISOString()
+        } : (data.livraison?.latitude && data.livraison?.longitude) ? {
+          lat: parseFloat(data.livraison.latitude),
+          lng: parseFloat(data.livraison.longitude),
+          timestamp: new Date().toISOString()
+        } : null;
+
+        console.log('📍 [useDeliveryTracking] Position extraite:', newDriverPos);
+
+        // ✅ NOUVEAU: Si pas de position extraite, utiliser position initiale de livraison
+        if (!newDriverPos && data.livraison) {
+          console.log('🔄 [useDeliveryTracking] Utilisation position initiale livraison...');
+          const initialPos = {
+            lat: parseFloat(data.livraison.latitude),
+            lng: parseFloat(data.livraison.longitude),
+            timestamp: data.livraison.updatedAt || new Date().toISOString()
+          };
+
+          if (initialPos.lat && initialPos.lng) {
+            console.log('✅ [useDeliveryTracking] Position initiale trouvée:', initialPos);
+            setDriverPosition(initialPos);
+            lastDriverPositionRef.current = initialPos;
+            memoizedOnPositionUpdate(initialPos);
+          }
+        }
+
+        // ✅ CORRECTION: Extraire la destination depuis les bonnes propriétés
+        console.log('🎯 [useDeliveryTracking] Recherche destination dans data:', {
+          destination: data.destination,
+          command_address: data.command?.address_id,
+          planification_address: data.planification?.commande_id?.address_id
+        });
+
+        const newDestPos = data.destination ? {
+          lat: parseFloat(data.destination.latitude),
+          lng: parseFloat(data.destination.longitude)
+        } : data.command?.address_id ? {
+          lat: parseFloat(data.command.address_id.latitude),
+          lng: parseFloat(data.command.address_id.longitude)
+        } : data.planification?.commande_id?.address_id ? {
+          lat: parseFloat(data.planification.commande_id.address_id.latitude),
+          lng: parseFloat(data.planification.commande_id.address_id.longitude)
+        } : null;
+
+        console.log('🎯 [useDeliveryTracking] Destination extraite:', newDestPos);
   
         // Ne mettre à jour que si les données ont changé  
         setDeliveryData(prevData => {  
@@ -203,53 +254,79 @@ export const useDeliveryTracking = (deliveryId, options = {}) => {
     };  
   }, [fetchDeliveryData, enabled, deliveryId, interval, realTimeUpdates]);  
   
-  // WebSocket listeners  
-  useEffect(() => {  
-    if (!realTimeUpdates || !deliveryId || !isConnected) return;  
-  
-    identify(null, deliveryId, 'customer');  
-  
-    const unsubscribePosition = subscribe('position_updated', (data) => {  
-      if (data.deliveryId === deliveryId) {  
-        const newPosition = {  
-          lat: parseFloat(data.position.latitude),  
-          lng: parseFloat(data.position.longitude),  
-          timestamp: data.timestamp  
-        };  
-  
-        if (hasMovedSignificantly(lastDriverPositionRef.current, newPosition)) {  
-          console.log('📡 Nouvelle position WebSocket:', newPosition);  
-          lastDriverPositionRef.current = newPosition;  
-          setDriverPosition(newPosition);  
-          memoizedOnPositionUpdate(newPosition);  
-        }  
-      }  
-    });  
-  
-    const unsubscribeStatus = subscribe('status_updated', (data) => {  
-      if (data.deliveryId === deliveryId) {  
-        setDeliveryData(prev => ({  
-          ...prev,  
-          statut_livraison: data.status  
-        }));  
-        memoizedOnStatusChange(data.status);  
-      }  
-    });  
-  
-    return () => {  
-      unsubscribePosition();  
-      unsubscribeStatus();  
-    };  
-  }, [  
-    realTimeUpdates,  
-    deliveryId,  
-    isConnected,  
-    subscribe,  
-    identify,  
-    memoizedOnPositionUpdate,  
-    memoizedOnStatusChange,  
-    hasMovedSignificantly  
-  ]);  
+  // WebSocket listeners
+  useEffect(() => {
+    if (!realTimeUpdates || !deliveryId || !isConnected) return;
+
+    identify(null, deliveryId, 'customer');
+
+    const unsubscribePosition = subscribe('position_updated', (data) => {
+      console.log('📡 [useDeliveryTracking] Position WebSocket reçue:', data);
+      console.log('   - deliveryId recherché:', deliveryId);
+      console.log('   - data.deliveryId:', data.deliveryId);
+      console.log('   - data.planificationId:', data.planificationId);
+
+      // ✅ CORRECTION: Vérifier à la fois deliveryId et planificationId pour compatibilité
+      if (data.deliveryId === deliveryId || data.planificationId === deliveryId) {
+        const newPosition = {
+          lat: parseFloat(data.position.latitude),
+          lng: parseFloat(data.position.longitude),
+          timestamp: data.timestamp
+        };
+
+        console.log('✅ Position WebSocket acceptée:', newPosition);
+
+        if (hasMovedSignificantly(lastDriverPositionRef.current, newPosition)) {
+          console.log('📍 Mise à jour position chauffeur via WebSocket:', newPosition);
+          lastDriverPositionRef.current = newPosition;
+          setDriverPosition(newPosition);
+          memoizedOnPositionUpdate(newPosition);
+        } else {
+          console.log('📍 Position WebSocket ignorée (mouvement insignifiant)');
+        }
+      } else {
+        console.log('📡 Position WebSocket ignorée (ID différent)');
+      }
+    });
+
+    const unsubscribeStatus = subscribe('status_updated', (data) => {
+      if (data.deliveryId === deliveryId || data.planificationId === deliveryId) {
+        setDeliveryData(prev => ({
+          ...prev,
+          statut_livraison: data.status
+        }));
+        memoizedOnStatusChange(data.status);
+      }
+    });
+
+    // ✅ NOUVEAU: Écouter les démarrages de livraison pour se réabonner avec le bon ID
+    const unsubscribeDeliveryStarted = subscribe('delivery_started', (data) => {
+      console.log('🚚 [useDeliveryTracking] Livraison démarrée:', data);
+      // Si c'est pour notre planification, on se réabonne avec l'ID de livraison
+      if (data.planificationId === deliveryId) {
+        console.log('✅ [useDeliveryTracking] Réabonnement avec ID livraison:', data.deliveryId);
+        identify(null, data.deliveryId, 'customer');
+        // Recharger les données pour avoir les nouvelles informations
+        fetchDeliveryData();
+      }
+    });
+
+    return () => {
+      unsubscribePosition();
+      unsubscribeStatus();
+      unsubscribeDeliveryStarted();
+    };
+  }, [
+    realTimeUpdates,
+    deliveryId,
+    isConnected,
+    subscribe,
+    identify,
+    memoizedOnPositionUpdate,
+    memoizedOnStatusChange,
+    hasMovedSignificantly,
+    fetchDeliveryData
+  ]);
   
   // Nettoyage  
   useEffect(() => {  

@@ -28,6 +28,32 @@ const RealDeliveryMap = ({
   const [error, setError] = useState(null);
   const [userLocation, setUserLocation] = useState(currentLocation);
 
+  // ✅ NOUVEAU: Fonction d'initialisation de carte réutilisable
+  const initializeMapWithLocation = useCallback((location) => {
+    if (mapInstanceRef.current || !mapRef.current || !leafletLoaded) return;
+
+    try {
+      console.log('🗺️ [RealDeliveryMap] Initialisation forcée avec position:', location);
+
+      mapInstanceRef.current = window.L.map(mapRef.current, {
+        center: [location.lat, location.lng],
+        zoom: 12,
+        zoomControl: false
+      });
+
+      // Tuiles OpenStreetMap
+      window.L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+        attribution: '© OpenStreetMap contributors',
+        maxZoom: 19
+      }).addTo(mapInstanceRef.current);
+
+      setMapReady(true);
+      console.log('✅ Carte chauffeur initialisée avec succès (forcée)');
+    } catch (err) {
+      console.error('❌ Erreur initialisation carte chauffeur (forcée):', err);
+    }
+  }, [leafletLoaded]);
+
   // Chargement de Leaflet
   useEffect(() => {
     const loadLeaflet = async () => {
@@ -108,35 +134,48 @@ const RealDeliveryMap = ({
   useEffect(() => {
     if (!leafletLoaded || mapReady || !mapRef.current) return;
 
-    // Utilise la prop `currentLocation` si elle est disponible, sinon attend l'action utilisateur
-    const locationToUse = currentLocation || userLocation;
+    // ✅ CORRECTION: Gestion plus flexible des coordonnées
+    console.log('🔍 [RealDeliveryMap] Vérification coordonnées:', {
+      currentLocation,
+      userLocation,
+      currentLocationFormat: currentLocation ? {
+        lat: currentLocation.lat || currentLocation.latitude,
+        lng: currentLocation.lng || currentLocation.longitude
+      } : null
+    });
+
+    // Normaliser le format des coordonnées
+    const normalizeLocation = (loc) => {
+      if (!loc) return null;
+      return {
+        lat: loc.lat || loc.latitude,
+        lng: loc.lng || loc.longitude
+      };
+    };
+
+    const normalizedCurrent = normalizeLocation(currentLocation);
+    const normalizedUser = normalizeLocation(userLocation);
+    const locationToUse = normalizedCurrent || normalizedUser;
 
     if (!locationToUse || typeof locationToUse.lat !== 'number' || typeof locationToUse.lng !== 'number') {
       console.log('⏳ Attente des coordonnées valides pour initialiser la carte...');
+      console.log('   - currentLocation:', currentLocation);
+      console.log('   - userLocation:', userLocation);
+      console.log('   - locationToUse:', locationToUse);
+
+      // ✅ NOUVEAU: Initialiser avec coordonnées par défaut après 3 secondes
+      if (!mapInstanceRef.current) {
+        setTimeout(() => {
+          console.log('🔄 Initialisation forcée avec coordonnées par défaut...');
+          const defaultLocation = { lat: 33.5731, lng: -7.5898 }; // Casablanca
+          initializeMapWithLocation(defaultLocation);
+        }, 3000);
+      }
       return;
     }
 
-    try {
-      console.log('🗺️ Initialisation de la carte avec position:', locationToUse);
-
-      mapInstanceRef.current = window.L.map(mapRef.current, {
-        center: [locationToUse.lat, locationToUse.lng],
-        zoom: 12,
-        zoomControl: false
-      });
-
-      // Tuiles OpenStreetMap
-      window.L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-        attribution: '© OpenStreetMap contributors',
-        maxZoom: 18
-      }).addTo(mapInstanceRef.current);
-
-      setMapReady(true);
-      console.log('✅ Carte initialisée');
-    } catch (err) {
-      console.error('❌ Erreur initialisation carte:', err);
-      setError('Erreur lors de l\'initialisation de la carte');
-    }
+    // ✅ UTILISER la fonction d'initialisation réutilisable
+    initializeMapWithLocation(locationToUse);
   }, [leafletLoaded, userLocation, currentLocation]);
 
   // ✅ Ancienne logique de useEffect retirée
@@ -161,27 +200,46 @@ const RealDeliveryMap = ({
     });
   }, []);
 
-  // Mettre à jour la position actuelle
+  // ✅ CORRECTION: Mettre à jour la position actuelle avec currentLocation
   useEffect(() => {
-    if (!mapReady || !userLocation) return;
+    const locationToShow = currentLocation || userLocation;
+    console.log('🔍 [RealDeliveryMap] Mise à jour marqueur chauffeur:', {
+      mapReady,
+      currentLocation,
+      userLocation,
+      locationToShow
+    });
+
+    if (!mapReady || !locationToShow) return;
 
     try {
+      // Normaliser la position
+      const normalizedLocation = {
+        lat: locationToShow.lat || locationToShow.latitude,
+        lng: locationToShow.lng || locationToShow.longitude
+      };
+
+      if (!normalizedLocation.lat || !normalizedLocation.lng) {
+        console.log('❌ Coordonnées invalides pour marqueur chauffeur:', normalizedLocation);
+        return;
+      }
+
       if (currentLocationMarkerRef.current) {
         mapInstanceRef.current.removeLayer(currentLocationMarkerRef.current);
       }
 
       const currentIcon = createCustomIcon('current', '#28a745', 20);
-      currentLocationMarkerRef.current = window.L.marker([userLocation.lat, userLocation.lng], { 
-        icon: currentIcon 
+      currentLocationMarkerRef.current = window.L.marker([normalizedLocation.lat, normalizedLocation.lng], {
+        icon: currentIcon
       })
         .addTo(mapInstanceRef.current)
-        .bindPopup('<strong>Ma position</strong><br/>Position actuelle');
+        .bindPopup('<strong>🚗 Ma position</strong><br/>Position du chauffeur');
 
-      console.log('📍 Marqueur position ajouté');
+      console.log('✅ Marqueur de position chauffeur ajouté:', normalizedLocation);
     } catch (err) {
-      console.error('❌ Erreur ajout marqueur position:', err);
+      console.error('❌ Erreur ajout marqueur position chauffeur:', err);
     }
-  }, [mapReady, userLocation, createCustomIcon]);
+  }, [mapReady, userLocation, currentLocation, createCustomIcon]);
 
   // Obtenir la couleur selon la priorité
   const getPriorityColor = useCallback((priority) => {

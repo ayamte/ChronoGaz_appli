@@ -1,12 +1,14 @@
 // chronogaz_front/src/components/client/trackorderpage/InteractiveMap.jsx
-import React, { useEffect, useRef, useCallback, useState, useMemo } from "react";
-import { useDeliveryTracking } from "../../../hooks/useDeliveryTracking";
+import React, { useEffect, useLayoutEffect, useRef, useCallback, useState, useMemo } from "react";
+import { useWebSocket } from "../../../hooks/useWebSocket";
 import { createCustomIcon, getMapStyles, fitMapBounds } from "../../../utils/mapUtils";
 
 //const GRAPHHOPPER_API_KEY = '6fe731b8-5611-4fb5-afa2-da5059ae2564';
 
 const InteractiveMap = ({
   deliveryId,
+  driverPosition,
+  destinationPosition,
   isVisible = true,
   autoCenter = true,
   showRoute = true,
@@ -37,33 +39,56 @@ const InteractiveMap = ({
     if (onStatusChange) onStatusChange(status);
   }, [onStatusChange]);
 
-  // Hook de tracking avec callbacks mémorisés
-  const {
-    deliveryData,
-    driverPosition,
-    destinationPosition,
-    routeInfo,
-    loading,
-    error: trackingError,
-    isConnected,
-    refetch
-  } = useDeliveryTracking(deliveryId, {
-    enabled: isVisible && !!deliveryId,
-    interval: updateInterval,
-    onPositionUpdate: memoizedOnPositionUpdate,
-    onStatusChange: memoizedOnStatusChange,
-    realTimeUpdates: true
-  });
+  // ✅ SIMPLE: Utiliser les positions passées en props + WebSocket pour temps réel
+  const { subscribe, isConnected } = useWebSocket(true);
+  const [currentDriverPosition, setCurrentDriverPosition] = useState(driverPosition);
+  const [routeInfo, setRouteInfo] = useState(null);
+  const [loading, setLoading] = useState(false);
 
-  // Gestion des erreurs
+  // Mettre à jour la position locale quand les props changent
   useEffect(() => {
-    if (trackingError) {
-      console.error('❌ Erreur de tracking:', trackingError);
-      setError('Erreur lors de la récupération des données de tracking');
-    } else {
-      setError(null);
+    if (driverPosition) {
+      setCurrentDriverPosition(driverPosition);
+      console.log('🔍 [InteractiveMap] Position initiale chauffeur:', driverPosition);
     }
-  }, [trackingError]);
+  }, [driverPosition]);
+
+  // ✅ NOUVEAU: Écouter les mises à jour WebSocket temps réel
+  useEffect(() => {
+    if (!deliveryId || !isConnected) return;
+
+    const unsubscribePosition = subscribe('position_updated', (data) => {
+      console.log('📡 [InteractiveMap] Position WebSocket reçue:', data);
+
+      if (data.deliveryId === deliveryId) {
+        const newPosition = {
+          lat: parseFloat(data.position.latitude),
+          lng: parseFloat(data.position.longitude),
+          timestamp: data.timestamp
+        };
+
+        console.log('✅ [InteractiveMap] Mise à jour position temps réel:', newPosition);
+        setCurrentDriverPosition(newPosition);
+
+        if (onPositionUpdate) {
+          onPositionUpdate(newPosition);
+        }
+      }
+    });
+
+    return unsubscribePosition;
+  }, [deliveryId, isConnected, subscribe, onPositionUpdate]);
+
+  // Logs pour déboguer les positions reçues
+  useEffect(() => {
+    console.log('🔍 [InteractiveMap] État positions:', {
+      deliveryId,
+      driverPosition,
+      currentDriverPosition,
+      destinationPosition,
+      isVisible
+    });
+  }, [deliveryId, driverPosition, currentDriverPosition, destinationPosition, isVisible]);
 
   // Chargement de Leaflet (une seule fois)
   useEffect(() => {
@@ -121,32 +146,58 @@ const InteractiveMap = ({
     };
   }, []);
 
-  // Initialisation de la carte (une seule fois)
-  useEffect(() => {
-    if (mapReady || !leafletLoaded || !driverPosition || !destinationPosition) {
+  // ✅ CORRECTION: Initialisation simplifiée avec useLayoutEffect
+  useLayoutEffect(() => {
+    if (mapReady || !leafletLoaded) {
       return;
     }
 
+    console.log('🔍 [InteractiveMap] Initialisation avec useLayoutEffect');
+    console.log('   - mapRef.current:', mapRef.current);
+    console.log('   - leafletLoaded:', leafletLoaded);
+
+    const defaultCenter = destinationPosition || currentDriverPosition || { lat: 33.5731, lng: -7.5898 };
+
     try {
-      console.log('🗺️ Initialisation de la carte...');
-      mapInstanceRef.current = window.L.map(mapRef.current, {
-        center: [driverPosition.lat, driverPosition.lng],
-        zoom: 13,
-        zoomControl: true
-      });
+      // ✅ CORRECTION: Utiliser l'ID comme fallback si ref ne fonctionne pas
+      const timer = setTimeout(() => {
+        let mapContainer = mapRef.current;
 
-      window.L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-        attribution: '© OpenStreetMap contributors',
-        maxZoom: 19
-      }).addTo(mapInstanceRef.current);
+        if (!mapContainer) {
+          console.log('🔍 Ref non disponible, recherche par ID...');
+          mapContainer = document.getElementById(`interactive-map-${deliveryId}`);
+        }
 
-      setMapReady(true);
-      console.log('✅ Carte initialisée avec succès');
+        if (!mapContainer) {
+          console.error('❌ Conteneur de carte introuvable (ref ET ID)');
+          setError('Conteneur de carte introuvable');
+          return;
+        }
+
+        console.log('🗺️ Initialisation de la carte avec centre:', defaultCenter);
+        console.log('🗺️ Conteneur trouvé:', mapContainer);
+
+        mapInstanceRef.current = window.L.map(mapContainer, {
+          center: [defaultCenter.lat, defaultCenter.lng],
+          zoom: 13,
+          zoomControl: true
+        });
+
+        window.L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+          attribution: '© OpenStreetMap contributors',
+          maxZoom: 19
+        }).addTo(mapInstanceRef.current);
+
+        setMapReady(true);
+        console.log('✅ Carte client initialisée avec succès');
+      }, 100);
+
+      return () => clearTimeout(timer);
     } catch (err) {
       console.error('❌ Erreur initialisation carte:', err);
       setError('Erreur lors de l\'initialisation de la carte: ' + err.message);
     }
-  }, [leafletLoaded, mapReady, driverPosition, destinationPosition]);
+  }, [leafletLoaded, mapReady, destinationPosition, currentDriverPosition, deliveryId]);
 
   // Fonction de décodage polyline
   const decodePolyline = useCallback((encoded) => {
@@ -183,20 +234,32 @@ const InteractiveMap = ({
     return coordinates;
   }, []);
 
-  // Création/mise à jour des marqueurs (optimisé)
+  // ✅ CORRECTION: Création/mise à jour des marqueurs avec currentDriverPosition
   useEffect(() => {
-    if (!mapReady || !leafletLoaded || !driverPosition || !destinationPosition) return;
+    if (!mapReady || !leafletLoaded || !currentDriverPosition || !destinationPosition) {
+      console.log('🔍 [InteractiveMap] Conditions marqueurs non remplies:', {
+        mapReady,
+        leafletLoaded,
+        currentDriverPosition,
+        destinationPosition
+      });
+      return;
+    }
 
     const createOrUpdateMarkers = () => {
       try {
-        // Marqueur du livreur
+        console.log('🔄 [InteractiveMap] Création/mise à jour marqueurs...');
+
+        // Marqueur du livreur (temps réel)
         if (!driverMarkerRef.current) {
           const driverIcon = createCustomIcon('driver', '#4DAEBD');
-          driverMarkerRef.current = window.L.marker([driverPosition.lat, driverPosition.lng], { icon: driverIcon })
+          driverMarkerRef.current = window.L.marker([currentDriverPosition.lat, currentDriverPosition.lng], { icon: driverIcon })
             .addTo(mapInstanceRef.current)
-            .bindPopup(`<h4>Livreur</h4><p>Position en temps réel</p>`);
+            .bindPopup(`<h4>🚗 Livreur</h4><p>Position temps réel</p>`);
+          console.log('📍 Marqueur chauffeur créé');
         } else {
-          driverMarkerRef.current.setLatLng([driverPosition.lat, driverPosition.lng]);
+          driverMarkerRef.current.setLatLng([currentDriverPosition.lat, currentDriverPosition.lng]);
+          console.log('📍 Marqueur chauffeur mis à jour');
         }
 
         // Marqueur de destination
@@ -204,14 +267,15 @@ const InteractiveMap = ({
           const destinationIcon = createCustomIcon('destination', '#1F55A3');
           destinationMarkerRef.current = window.L.marker([destinationPosition.lat, destinationPosition.lng], { icon: destinationIcon })
             .addTo(mapInstanceRef.current)
-            .bindPopup(`<h4>Destination</h4><p>${deliveryData?.destination?.rue || 'Adresse'}</p>`);
+            .bindPopup(`<h4>🏠 Destination</h4><p>Adresse de livraison</p>`);
         } else {
           destinationMarkerRef.current.setLatLng([destinationPosition.lat, destinationPosition.lng]);
         }
 
         // Centrage automatique
         if (autoCenter && fitMapBounds) {
-          fitMapBounds(mapInstanceRef.current, [driverPosition, destinationPosition]);
+          fitMapBounds(mapInstanceRef.current, [currentDriverPosition, destinationPosition]);
+          console.log('🎯 Vue ajustée pour inclure tous les marqueurs');
         }
       } catch (err) {
         console.error('❌ Erreur création marqueurs:', err);
@@ -219,7 +283,7 @@ const InteractiveMap = ({
     };
 
     createOrUpdateMarkers();
-  }, [mapReady, leafletLoaded, driverPosition, destinationPosition, autoCenter, deliveryData]);
+  }, [mapReady, leafletLoaded, currentDriverPosition, destinationPosition, autoCenter]);
 
   // ✅ CORRECTION: Mise à jour de la route simplifiée - TOUJOURS redessiner quand routeInfo change
   useEffect(() => {
@@ -278,12 +342,12 @@ const InteractiveMap = ({
 
   // Mémorisation des infos de debug pour éviter les re-renders
   const debugInfo = useMemo(() => ({
-    deliveryData: !!deliveryData,
-    driverPosition: !!driverPosition,
+    deliveryData: !!deliveryId,
+    driverPosition: !!currentDriverPosition,
     destinationPosition: !!destinationPosition,
     leafletLoaded,
     isConnected
-  }), [deliveryData, driverPosition, destinationPosition, leafletLoaded, isConnected]);
+  }), [deliveryId, currentDriverPosition, destinationPosition, leafletLoaded, isConnected]);
 
   if (!isVisible) return null;
 
@@ -308,18 +372,18 @@ const InteractiveMap = ({
             <p>Connected: {debugInfo.isConnected ? '✅' : '❌'}</p>
           </div>
           
-          <button 
-            onClick={refetch}
+          <button
+            onClick={() => window.location.reload()}
             className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
           >
-            Réessayer
+            🔄 Recharger
           </button>
         </div>
       </div>
     );
   }
 
-  if (loading || !deliveryData || !driverPosition || !destinationPosition) {
+  if (loading || !currentDriverPosition || !destinationPosition) {
     return (
       <div className="bg-white rounded-lg shadow-md p-6">
         <div className="text-center">
@@ -347,7 +411,7 @@ const InteractiveMap = ({
               Suivi en Temps Réel
             </h3>
             <p className="text-sm text-gray-600">
-              Livraison #{deliveryId || deliveryData?.planification_id}
+              Livraison #{deliveryId}
             </p>
           </div>
           <div className="flex items-center space-x-4">
@@ -358,24 +422,29 @@ const InteractiveMap = ({
               </span>
             </div>
             
-            {/*<button
-              onClick={refetch}
+            <button
+              onClick={() => window.location.reload()}
               className="p-2 text-gray-400 hover:text-gray-600 transition-colors"
-              title="Actualiser"
+              title="🔄 Recharger"
             >
-              <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.001 0 01-15.357-2m15.357 2H15" />
-              </svg>
-  </button>*/}
+              🔄
+            </button>
           </div>
         </div>
       </div>
 
       <div className="relative">
-        <div 
+        <div
           ref={mapRef}
+          id={`interactive-map-${deliveryId}`}
           className="w-full h-96 z-10"
-          style={{ minHeight: '400px' }}
+          style={{
+            minHeight: '400px',
+            width: '100%',
+            height: '400px',
+            border: '1px solid #ddd',
+            borderRadius: '8px'
+          }}
         />
         
         {graphHopperError && (
@@ -421,13 +490,8 @@ const InteractiveMap = ({
           
           <div className="text-center">
             <p className="text-sm text-gray-600">Statut</p>
-            <p className={`text-lg font-bold ${
-              deliveryData?.statut_livraison === 'LIVREE' ? 'text-green-600' :
-              deliveryData?.statut_livraison === 'EN_COURS' ? 'text-blue-600' :
-              deliveryData?.statut_livraison === 'ECHEC' ? 'text-red-600' :
-              'text-yellow-600'
-            }`}>
-              {deliveryData?.statut_livraison || 'En cours'}
+            <p className="text-lg font-bold text-blue-600">
+              En cours
             </p>
           </div>
 
